@@ -4,6 +4,7 @@ import {
   getLatestBrainItem as getLatestBrainItemFromRepository,
   listInboxBrainItems,
   listLatestBrainItems,
+  searchBrainItems as searchBrainItemsFromRepository,
   updateBrainItemClassification,
 } from "@/features/brain/repository";
 import {
@@ -19,6 +20,7 @@ const SAVE_COMMAND_PATTERN = /^\/save(?:@\w+)?(?:\s+|$)/;
 const LIST_COMMAND_PATTERN = /^\/list(?:@\w+)?(?:\s+|$)/;
 const INBOX_COMMAND_PATTERN = /^\/inbox(?:@\w+)?(?:\s+|$)/;
 const LAST_COMMAND_PATTERN = /^\/last(?:@\w+)?(?:\s+|$)/;
+const SEARCH_COMMAND_PATTERN = /^\/search(?:@\w+)?(?:\s+|$)/;
 
 export function isSaveCommand(text: string): boolean {
   return SAVE_COMMAND_PATTERN.test(text);
@@ -36,8 +38,16 @@ export function isLastCommand(text: string): boolean {
   return LAST_COMMAND_PATTERN.test(text);
 }
 
+export function isSearchCommand(text: string): boolean {
+  return SEARCH_COMMAND_PATTERN.test(text);
+}
+
 export function getSavedTelegramText(text: string): string {
   return text.replace(SAVE_COMMAND_PATTERN, "").trim();
+}
+
+export function getSearchQuery(text: string): string {
+  return text.replace(SEARCH_COMMAND_PATTERN, "").trim();
 }
 
 export async function createBrainItemFromTelegram(
@@ -87,4 +97,14 @@ export async function getLatestBrainItem(): Promise<BrainItem | null> {
 
 export async function getInboxBrainItems(limit = 10): Promise<BrainItem[]> {
   return listInboxBrainItems(limit);
+}
+
+export async function searchBrainItems(query: string, limit = 10): Promise<BrainItem[]> {
+  const normalizedQuery = query.trim();
+
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  return searchBrainItemsFromRepository(normalizedQuery, limit);
 }

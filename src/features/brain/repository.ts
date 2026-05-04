@@ -51,6 +51,18 @@ function mapBrainItemRow(row: BrainItemRow): BrainItem {
   };
 }
 
+function escapeOrFilterValue(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function buildIlikePattern(value: string): string {
+  const escapedValue = escapeOrFilterValue(value)
+    .replace(/%/g, "\\%")
+    .replace(/_/g, "\\_");
+
+  return `"%${escapedValue}%"`;
+}
+
 export async function createBrainItem(
   input: CreateBrainItemInput
 ): Promise<BrainItem> {
@@ -143,6 +155,64 @@ export async function listInboxBrainItems(limit = 10): Promise<BrainItem[]> {
   }
 
   return (data as BrainItemRow[]).map(mapBrainItemRow);
+}
+
+export async function searchBrainItems(query: string, limit = 10): Promise<BrainItem[]> {
+  const supabase = createSupabaseServerClient();
+  const safeLimit = Math.min(Math.max(limit, 1), 10);
+  const ilikePattern = buildIlikePattern(query);
+  const searchFilter = [
+    `raw_text.ilike.${ilikePattern}`,
+    `summary.ilike.${ilikePattern}`,
+    `category.ilike.${ilikePattern}`,
+    `type.ilike.${ilikePattern}`,
+  ].join(",");
+
+  const { data, error } = await supabase
+    .from("brain_items")
+    .select("*")
+    .eq("status", DEFAULT_BRAIN_ITEM_STATUS)
+    .or(searchFilter)
+    .order("created_at", { ascending: false })
+    .limit(safeLimit);
+
+  if (error) {
+    throw new Error(`Failed to search brain items: ${error.message}`);
+  }
+
+  const directMatches = (data as BrainItemRow[]).map(mapBrainItemRow);
+
+  if (directMatches.length >= safeLimit) {
+    return directMatches;
+  }
+
+  const { data: tagRows, error: tagError } = await supabase
+    .from("brain_items")
+    .select("*")
+    .eq("status", DEFAULT_BRAIN_ITEM_STATUS)
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (tagError) {
+    throw new Error(`Failed to search brain item tags: ${tagError.message}`);
+  }
+
+  const normalizedQuery = query.toLocaleLowerCase();
+  const tagMatches = (tagRows as BrainItemRow[])
+    .map(mapBrainItemRow)
+    .filter((item) =>
+      item.tags.some((tag) => tag.toLocaleLowerCase().includes(normalizedQuery))
+    );
+
+  const mergedMatches = new Map<string, BrainItem>();
+
+  for (const item of [...directMatches, ...tagMatches]) {
+    mergedMatches.set(item.id, item);
+  }
+
+  return Array.from(mergedMatches.values())
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, safeLimit);
 }
 
 export async function updateBrainItemClassification(

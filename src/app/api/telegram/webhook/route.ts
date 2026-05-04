@@ -1,5 +1,6 @@
 import {
   createBrainItemFromTelegram,
+  getSearchQuery,
   getInboxBrainItems,
   getLatestBrainItem,
   getLatestBrainItems,
@@ -7,7 +8,9 @@ import {
   isInboxCommand,
   isLastCommand,
   isListCommand,
+  isSearchCommand,
   isSaveCommand,
+  searchBrainItems,
   tryClassifyBrainItem,
 } from "@/features/brain/service";
 import {
@@ -73,6 +76,24 @@ function formatInboxItemsList(items: { rawText: string; type: string }[]): strin
   return ["📥 Inbox:", ...lines].join("\n");
 }
 
+function formatSearchResults(
+  query: string,
+  items: { rawText: string; category: string; type: string }[]
+): string {
+  const lines = items.map((item, index) => {
+    const compactText = truncateTelegramItemText(
+      item.rawText.replace(/\s+/g, " ").trim(),
+      TELEGRAM_ITEM_TEXT_LIMIT
+    );
+    const category = item.category || DEFAULT_BRAIN_ITEM_CATEGORY;
+    const type = item.type || DEFAULT_BRAIN_ITEM_TYPE;
+
+    return `${index + 1}. [${category}/${type}] ${compactText}`;
+  });
+
+  return [`🔎 Результаты поиска: ${query}`, "", ...lines].join("\n");
+}
+
 function formatBrainItemValue(value: string | null | undefined, fallback: string): string {
   const normalizedValue = value?.trim();
   return normalizedValue ? normalizedValue : fallback;
@@ -128,8 +149,9 @@ export async function POST(request: Request) {
   const isList = isListCommand(parsedMessage.text);
   const isInbox = isInboxCommand(parsedMessage.text);
   const isLast = isLastCommand(parsedMessage.text);
+  const isSearch = isSearchCommand(parsedMessage.text);
 
-  if (!isSave && !isList && !isInbox && !isLast) {
+  if (!isSave && !isList && !isInbox && !isLast && !isSearch) {
     console.info("Telegram message ignored: unsupported command", {
       chatId: parsedMessage.chatId,
       messageId: parsedMessage.messageId,
@@ -225,6 +247,43 @@ export async function POST(request: Request) {
       await sendTelegramMessage(
         parsedMessage.chatId,
         "Не смог загрузить последнюю запись. Попробуй позже."
+      );
+    }
+
+    return okResponse();
+  }
+
+  if (isSearch) {
+    const query = getSearchQuery(parsedMessage.text);
+
+    if (!query) {
+      await sendTelegramMessage(parsedMessage.chatId, "Напиши так: /search что искать");
+      return okResponse();
+    }
+
+    try {
+      const items = await searchBrainItems(query, 10);
+
+      if (items.length === 0) {
+        await sendTelegramMessage(
+          parsedMessage.chatId,
+          "Ничего не нашёл. Попробуй другой запрос."
+        );
+        return okResponse();
+      }
+
+      await sendTelegramMessage(parsedMessage.chatId, formatSearchResults(query, items));
+    } catch (error) {
+      console.error("Telegram /search failed", {
+        chatId: parsedMessage.chatId,
+        messageId: parsedMessage.messageId,
+        query,
+        error,
+      });
+
+      await sendTelegramMessage(
+        parsedMessage.chatId,
+        "Не смог выполнить поиск. Попробуй позже."
       );
     }
 
