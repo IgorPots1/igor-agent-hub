@@ -1,0 +1,23 @@
+html {
+  font-family: Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 48px 20px;
+}
+
+h1 {
+  margin-bottom: 16px;
+}
+
+p {
+  line-height: 1.6;
+}
