@@ -1,6 +1,7 @@
 import { classifyBrainItem } from "@/features/brain/ai-classifier";
 import {
   createBrainItem,
+  listInboxBrainItems,
   listLatestBrainItems,
   updateBrainItemClassification,
 } from "@/features/brain/repository";
@@ -15,6 +16,7 @@ import type { ParsedTelegramUpdate } from "@/features/telegram/parser";
 
 const SAVE_COMMAND_PATTERN = /^\/save(?:@\w+)?(?:\s+|$)/;
 const LIST_COMMAND_PATTERN = /^\/list(?:@\w+)?(?:\s+|$)/;
+const INBOX_COMMAND_PATTERN = /^\/inbox(?:@\w+)?(?:\s+|$)/;
 
 export function isSaveCommand(text: string): boolean {
   return SAVE_COMMAND_PATTERN.test(text);
@@ -22,6 +24,10 @@ export function isSaveCommand(text: string): boolean {
 
 export function isListCommand(text: string): boolean {
   return LIST_COMMAND_PATTERN.test(text);
+}
+
+export function isInboxCommand(text: string): boolean {
+  return INBOX_COMMAND_PATTERN.test(text);
 }
 
 export function getSavedTelegramText(text: string): string {
@@ -67,4 +73,8 @@ export async function tryClassifyBrainItem(item: BrainItem): Promise<BrainItem |
 
 export async function getLatestBrainItems(limit = 5): Promise<BrainItem[]> {
   return listLatestBrainItems(limit);
+}
+
+export async function getInboxBrainItems(limit = 10): Promise<BrainItem[]> {
+  return listInboxBrainItems(limit);
 }

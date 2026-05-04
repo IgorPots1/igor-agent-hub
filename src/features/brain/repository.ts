@@ -100,6 +100,30 @@ export async function listLatestBrainItems(limit = 5): Promise<BrainItem[]> {
   return (data as BrainItemRow[]).map(mapBrainItemRow);
 }
 
+export async function listInboxBrainItems(limit = 10): Promise<BrainItem[]> {
+  const supabase = createSupabaseServerClient();
+
+  const inboxFilter = [
+    `and(category.eq.${DEFAULT_BRAIN_ITEM_CATEGORY},status.eq.${DEFAULT_BRAIN_ITEM_STATUS})`,
+    `and(category.is.null,status.eq.${DEFAULT_BRAIN_ITEM_STATUS})`,
+    `and(category.eq.${DEFAULT_BRAIN_ITEM_CATEGORY},status.is.null)`,
+    "and(category.is.null,status.is.null)",
+  ].join(",");
+
+  const { data, error } = await supabase
+    .from("brain_items")
+    .select("*")
+    .or(inboxFilter)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(`Failed to list inbox brain items: ${error.message}`);
+  }
+
+  return (data as BrainItemRow[]).map(mapBrainItemRow);
+}
+
 export async function updateBrainItemClassification(
   id: string,
   classification: BrainItemClassification

@@ -1,7 +1,9 @@
 import {
   createBrainItemFromTelegram,
+  getInboxBrainItems,
   getLatestBrainItems,
   getSavedTelegramText,
+  isInboxCommand,
   isListCommand,
   isSaveCommand,
   tryClassifyBrainItem,
@@ -17,6 +19,7 @@ import type { TelegramUpdate } from "@/features/telegram/types";
 const jsonHeaders = {
   "Content-Type": "application/json",
 };
+const TELEGRAM_ITEM_TEXT_LIMIT = 90;
 
 function okResponse() {
   return new Response(JSON.stringify({ ok: true }), {
@@ -43,6 +46,30 @@ function formatBrainItemsList(
   return ["🧠 Последние записи:", ...lines].join("\n");
 }
 
+function truncateTelegramItemText(text: string, maxLength: number): string {
+  const symbols = Array.from(text);
+
+  if (symbols.length <= maxLength) {
+    return text;
+  }
+
+  return `${symbols.slice(0, maxLength - 1).join("").trimEnd()}…`;
+}
+
+function formatInboxItemsList(items: { rawText: string; type: string }[]): string {
+  const lines = items.map((item, index) => {
+    const compactText = truncateTelegramItemText(
+      item.rawText.replace(/\s+/g, " ").trim(),
+      TELEGRAM_ITEM_TEXT_LIMIT
+    );
+    const type = item.type || DEFAULT_BRAIN_ITEM_TYPE;
+
+    return `${index + 1}. [${type}] ${compactText}`;
+  });
+
+  return ["📥 Inbox:", ...lines].join("\n");
+}
+
 export async function POST(request: Request) {
   let update: TelegramUpdate | null = null;
 
@@ -62,8 +89,9 @@ export async function POST(request: Request) {
 
   const isSave = isSaveCommand(parsedMessage.text);
   const isList = isListCommand(parsedMessage.text);
+  const isInbox = isInboxCommand(parsedMessage.text);
 
-  if (!isSave && !isList) {
+  if (!isSave && !isList && !isInbox) {
     console.info("Telegram message ignored: unsupported command", {
       chatId: parsedMessage.chatId,
       messageId: parsedMessage.messageId,
@@ -83,8 +111,8 @@ export async function POST(request: Request) {
       const brainItem = await createBrainItemFromTelegram(parsedMessage);
       const chatId = parsedMessage.chatId;
 
-      await tryClassifyBrainItem(brainItem);
       await sendTelegramMessage(chatId, "✅ Сохранил во второй мозг");
+      await tryClassifyBrainItem(brainItem);
 
       console.info("Telegram brain item saved", {
         chatId,
@@ -101,6 +129,35 @@ export async function POST(request: Request) {
       await sendTelegramMessage(
         parsedMessage.chatId,
         "Не смог сохранить. Попробуй ещё раз."
+      );
+    }
+
+    return okResponse();
+  }
+
+  if (isInbox) {
+    try {
+      const items = await getInboxBrainItems(10);
+
+      if (items.length === 0) {
+        await sendTelegramMessage(
+          parsedMessage.chatId,
+          "📥 Inbox пуст. Новые неразобранные записи появятся здесь."
+        );
+        return okResponse();
+      }
+
+      await sendTelegramMessage(parsedMessage.chatId, formatInboxItemsList(items));
+    } catch (error) {
+      console.error("Telegram /inbox failed", {
+        chatId: parsedMessage.chatId,
+        messageId: parsedMessage.messageId,
+        error,
+      });
+
+      await sendTelegramMessage(
+        parsedMessage.chatId,
+        "Не смог загрузить Inbox. Попробуй позже."
       );
     }
 
