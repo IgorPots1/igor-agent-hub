@@ -16,6 +16,9 @@ export type BrainReminder = {
 
 export type BrainReminderWithItem = BrainReminder & {
   rawText: string;
+  brainItemSource: string;
+  brainItemTags: string[];
+  brainItemType: string;
 };
 
 export type CreateBrainReminderInput = {

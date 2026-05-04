@@ -1,12 +1,15 @@
 import {
   createBrainItemFromTelegram,
   createForwardedBrainItemFromTelegram,
+  createReminderBrainItemFromTelegram,
   getBrainItemsForStats,
   getRecentBrainItems,
+  getReminderCommandText,
   getSearchQuery,
   getInboxBrainItems,
   getLatestBrainItem,
   getLatestBrainItems,
+  isRemindCommand,
   isRemindersCommand,
   getSavedTelegramText,
   getSummaryPeriod,
@@ -22,7 +25,9 @@ import {
   tryClassifyBrainItem,
 } from "@/features/brain/service";
 import {
+  createManualReminder,
   createEveningReviewReminders,
+  parseManualReminder,
   getUpcomingRemindersMessageForChat,
   sendForwardedMessageUnsupportedReply,
 } from "@/features/reminders/service";
@@ -74,7 +79,8 @@ function formatHelpMessage(): string {
     "🧠 Второй мозг",
     "",
     "/save текст — сохранить запись",
-    "/reminders — ближайшие вечерние напоминания",
+    "/remind время текст — поставить напоминание",
+    "/reminders — ближайшие напоминания",
     "/list — последние записи",
     "/inbox — неразобранное",
     "/last — последняя запись подробно",
@@ -310,6 +316,7 @@ export async function POST(request: Request) {
   const isHelp = isHelpCommand(messageText);
   const isSummary = isSummaryCommand(messageText);
   const isStats = isStatsCommand(messageText);
+  const isRemind = isRemindCommand(messageText);
   const isReminders = isRemindersCommand(messageText);
 
   if (
@@ -322,6 +329,7 @@ export async function POST(request: Request) {
     !isHelp &&
     !isSummary &&
     !isStats &&
+    !isRemind &&
     !isReminders
   ) {
     try {
@@ -362,6 +370,7 @@ export async function POST(request: Request) {
     !isHelp &&
     !isSummary &&
     !isStats &&
+    !isRemind &&
     !isReminders
   ) {
     console.info("Telegram message ignored: unsupported command", {
@@ -401,6 +410,46 @@ export async function POST(request: Request) {
       await sendTelegramMessage(
         parsedMessage.chatId,
         "Не смог сохранить. Попробуй ещё раз."
+      );
+    }
+
+    return okResponse();
+  }
+
+  if (isRemind) {
+    const reminderInput = getReminderCommandText(messageText);
+    const parsedReminder = parseManualReminder(reminderInput);
+
+    if (!parsedReminder) {
+      await sendTelegramMessage(
+        parsedMessage.chatId,
+        [
+          "Не понял время. Примеры:",
+          " /remind вечером проверить перенос тренировки",
+          " /remind завтра 09:00 написать ученику",
+          " /remind через 30 минут проверить deploy",
+        ].join("\n")
+      );
+      return okResponse();
+    }
+
+    try {
+      const brainItem = await createReminderBrainItemFromTelegram(parsedMessage, parsedReminder.rawText);
+      await createManualReminder(brainItem.id, String(parsedMessage.chatId), parsedReminder.remindAt);
+      await sendTelegramMessage(
+        parsedMessage.chatId,
+        `⏰ Напомню: ${parsedReminder.formattedLocalDateTime}\n${parsedReminder.rawText}`
+      );
+    } catch (error) {
+      console.error("Telegram /remind failed", {
+        chatId: parsedMessage.chatId,
+        messageId: parsedMessage.messageId,
+        error,
+      });
+
+      await sendTelegramMessage(
+        parsedMessage.chatId,
+        "Не смог сохранить напоминание. Попробуй ещё раз."
       );
     }
 

@@ -12,6 +12,7 @@ import {
 import {
   getEveningReviewTag,
   getForwardedTaskCategory,
+  getManualReminderTag,
 } from "@/features/reminders/service";
 import {
   DEFAULT_BRAIN_ITEM_CATEGORY,
@@ -30,6 +31,7 @@ const SEARCH_COMMAND_PATTERN = /^\/search(?:@\w+)?(?:\s+|$)/;
 const HELP_COMMAND_PATTERN = /^\/help(?:@\w+)?(?:\s+|$)/;
 const SUMMARY_COMMAND_PATTERN = /^\/summary(?:@\w+)?(?:\s+|$)/;
 const STATS_COMMAND_PATTERN = /^\/stats(?:@\w+)?(?:\s+|$)/;
+const REMIND_COMMAND_PATTERN = /^\/remind(?:@\w+)?(?:\s+|$)/;
 const REMINDERS_COMMAND_PATTERN = /^\/reminders(?:@\w+)?(?:\s+|$)/;
 
 export function isSaveCommand(text: string): boolean {
@@ -64,6 +66,10 @@ export function isStatsCommand(text: string): boolean {
   return STATS_COMMAND_PATTERN.test(text);
 }
 
+export function isRemindCommand(text: string): boolean {
+  return REMIND_COMMAND_PATTERN.test(text);
+}
+
 export function isRemindersCommand(text: string): boolean {
   return REMINDERS_COMMAND_PATTERN.test(text);
 }
@@ -74,6 +80,10 @@ export function getSavedTelegramText(text: string): string {
 
 export function getSearchQuery(text: string): string {
   return text.replace(SEARCH_COMMAND_PATTERN, "").trim();
+}
+
+export function getReminderCommandText(text: string): string {
+  return text.replace(REMIND_COMMAND_PATTERN, "").trim();
 }
 
 export function getSummaryPeriod(text: string): "today" | "week" | null {
@@ -124,6 +134,30 @@ export async function createForwardedBrainItemFromTelegram(
     category: getForwardedTaskCategory(rawText),
     tags: [getEveningReviewTag()],
     source: "telegram_forward",
+    status: DEFAULT_BRAIN_ITEM_STATUS,
+    telegramChatId: String(parsedMessage.chatId),
+    telegramUserId: parsedMessage.userId === null ? null : String(parsedMessage.userId),
+    telegramUsername: parsedMessage.username,
+    telegramMessageId: String(parsedMessage.messageId),
+  });
+}
+
+export async function createReminderBrainItemFromTelegram(
+  parsedMessage: ParsedTelegramUpdate,
+  rawText: string
+): Promise<BrainItem> {
+  const normalizedText = rawText.trim();
+
+  if (!normalizedText) {
+    throw new Error("Telegram /remind command is missing reminder text");
+  }
+
+  return createBrainItem({
+    rawText: normalizedText,
+    type: "reminder",
+    category: DEFAULT_BRAIN_ITEM_CATEGORY,
+    tags: [getManualReminderTag()],
+    source: DEFAULT_BRAIN_ITEM_SOURCE,
     status: DEFAULT_BRAIN_ITEM_STATUS,
     telegramChatId: String(parsedMessage.chatId),
     telegramUserId: parsedMessage.userId === null ? null : String(parsedMessage.userId),

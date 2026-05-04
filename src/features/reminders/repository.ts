@@ -19,7 +19,10 @@ type BrainReminderRow = {
 };
 
 type BrainReminderWithItemRow = BrainReminderRow & {
-  brain_item: { raw_text: string } | { raw_text: string }[] | null;
+  brain_item:
+    | { raw_text: string; source: string | null; tags: string[] | null; type: string | null }
+    | { raw_text: string; source: string | null; tags: string[] | null; type: string | null }[]
+    | null;
 };
 
 function mapBrainReminderRow(row: BrainReminderRow): BrainReminder {
@@ -44,10 +47,23 @@ function getJoinedRawText(row: BrainReminderWithItemRow): string {
   return row.brain_item?.raw_text ?? "";
 }
 
+function getJoinedBrainItem(row: BrainReminderWithItemRow) {
+  if (Array.isArray(row.brain_item)) {
+    return row.brain_item[0] ?? null;
+  }
+
+  return row.brain_item;
+}
+
 function mapBrainReminderWithItemRow(row: BrainReminderWithItemRow): BrainReminderWithItem {
+  const brainItem = getJoinedBrainItem(row);
+
   return {
     ...mapBrainReminderRow(row),
     rawText: getJoinedRawText(row),
+    brainItemSource: brainItem?.source ?? "telegram",
+    brainItemTags: brainItem?.tags ?? [],
+    brainItemType: brainItem?.type ?? "note",
   };
 }
 
@@ -84,7 +100,7 @@ export async function listDueBrainReminders(
   const { data, error } = await supabase
     .from("brain_reminders")
     .select(
-      "id, brain_item_id, telegram_chat_id, remind_at, status, sent_at, error, created_at, updated_at, brain_item:brain_items!inner(raw_text)"
+      "id, brain_item_id, telegram_chat_id, remind_at, status, sent_at, error, created_at, updated_at, brain_item:brain_items!inner(raw_text, source, tags, type)"
     )
     .eq("status", "pending")
     .lte("remind_at", nowIso)
@@ -108,7 +124,7 @@ export async function listUpcomingBrainRemindersForChat(
   const { data, error } = await supabase
     .from("brain_reminders")
     .select(
-      "id, brain_item_id, telegram_chat_id, remind_at, status, sent_at, error, created_at, updated_at, brain_item:brain_items!inner(raw_text)"
+      "id, brain_item_id, telegram_chat_id, remind_at, status, sent_at, error, created_at, updated_at, brain_item:brain_items!inner(raw_text, source, tags, type)"
     )
     .eq("telegram_chat_id", telegramChatId)
     .eq("status", "pending")
