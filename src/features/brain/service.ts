@@ -2,6 +2,8 @@ import { classifyBrainItem } from "@/features/brain/ai-classifier";
 import {
   createBrainItem,
   getLatestBrainItem as getLatestBrainItemFromRepository,
+  listActiveBrainItemsForStats,
+  listActiveBrainItemsSince,
   listInboxBrainItems,
   listLatestBrainItems,
   searchBrainItems as searchBrainItemsFromRepository,
@@ -21,6 +23,9 @@ const LIST_COMMAND_PATTERN = /^\/list(?:@\w+)?(?:\s+|$)/;
 const INBOX_COMMAND_PATTERN = /^\/inbox(?:@\w+)?(?:\s+|$)/;
 const LAST_COMMAND_PATTERN = /^\/last(?:@\w+)?(?:\s+|$)/;
 const SEARCH_COMMAND_PATTERN = /^\/search(?:@\w+)?(?:\s+|$)/;
+const HELP_COMMAND_PATTERN = /^\/help(?:@\w+)?(?:\s+|$)/;
+const SUMMARY_COMMAND_PATTERN = /^\/summary(?:@\w+)?(?:\s+|$)/;
+const STATS_COMMAND_PATTERN = /^\/stats(?:@\w+)?(?:\s+|$)/;
 
 export function isSaveCommand(text: string): boolean {
   return SAVE_COMMAND_PATTERN.test(text);
@@ -42,12 +47,34 @@ export function isSearchCommand(text: string): boolean {
   return SEARCH_COMMAND_PATTERN.test(text);
 }
 
+export function isHelpCommand(text: string): boolean {
+  return HELP_COMMAND_PATTERN.test(text);
+}
+
+export function isSummaryCommand(text: string): boolean {
+  return SUMMARY_COMMAND_PATTERN.test(text);
+}
+
+export function isStatsCommand(text: string): boolean {
+  return STATS_COMMAND_PATTERN.test(text);
+}
+
 export function getSavedTelegramText(text: string): string {
   return text.replace(SAVE_COMMAND_PATTERN, "").trim();
 }
 
 export function getSearchQuery(text: string): string {
   return text.replace(SEARCH_COMMAND_PATTERN, "").trim();
+}
+
+export function getSummaryPeriod(text: string): "today" | "week" | null {
+  const normalizedPeriod = text.replace(SUMMARY_COMMAND_PATTERN, "").trim().toLowerCase();
+
+  if (normalizedPeriod === "today" || normalizedPeriod === "week") {
+    return normalizedPeriod;
+  }
+
+  return null;
 }
 
 export async function createBrainItemFromTelegram(
@@ -97,6 +124,20 @@ export async function getLatestBrainItem(): Promise<BrainItem | null> {
 
 export async function getInboxBrainItems(limit = 10): Promise<BrainItem[]> {
   return listInboxBrainItems(limit);
+}
+
+export async function getRecentBrainItems(
+  period: "today" | "week",
+  limit = 50
+): Promise<BrainItem[]> {
+  const days = period === "today" ? 1 : 7;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  return listActiveBrainItemsSince(since.toISOString(), limit);
+}
+
+export async function getBrainItemsForStats(limit = 500): Promise<BrainItem[]> {
+  return listActiveBrainItemsForStats(limit);
 }
 
 export async function searchBrainItems(query: string, limit = 10): Promise<BrainItem[]> {

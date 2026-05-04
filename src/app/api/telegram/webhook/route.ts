@@ -1,15 +1,21 @@
 import {
   createBrainItemFromTelegram,
+  getBrainItemsForStats,
+  getRecentBrainItems,
   getSearchQuery,
   getInboxBrainItems,
   getLatestBrainItem,
   getLatestBrainItems,
   getSavedTelegramText,
+  getSummaryPeriod,
+  isHelpCommand,
   isInboxCommand,
   isLastCommand,
   isListCommand,
   isSearchCommand,
   isSaveCommand,
+  isStatsCommand,
+  isSummaryCommand,
   searchBrainItems,
   tryClassifyBrainItem,
 } from "@/features/brain/service";
@@ -26,6 +32,10 @@ const jsonHeaders = {
   "Content-Type": "application/json",
 };
 const TELEGRAM_ITEM_TEXT_LIMIT = 90;
+const SUMMARY_ITEM_LIMIT = 50;
+const SUMMARY_BULLET_LIMIT = 5;
+const STATS_ITEM_LIMIT = 1000;
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 function okResponse() {
   return new Response(JSON.stringify({ ok: true }), {
@@ -50,6 +60,21 @@ function formatBrainItemsList(
   });
 
   return ["🧠 Последние записи:", ...lines].join("\n");
+}
+
+function formatHelpMessage(): string {
+  return [
+    "🧠 Второй мозг",
+    "",
+    "/save текст — сохранить запись",
+    "/list — последние записи",
+    "/inbox — неразобранное",
+    "/last — последняя запись подробно",
+    "/search запрос — поиск",
+    "/summary today — итоги за сегодня",
+    "/summary week — итоги за неделю",
+    "/stats — статистика мозга",
+  ].join("\n");
 }
 
 function truncateTelegramItemText(text: string, maxLength: number): string {
@@ -128,6 +153,124 @@ function formatLatestBrainItem(item: BrainItem): string {
   ].join("\n");
 }
 
+function getSummaryText(item: BrainItem): string {
+  return item.summary?.trim() || item.rawText.replace(/\s+/g, " ").trim();
+}
+
+function isDecisionItem(item: BrainItem): boolean {
+  return item.type === "decision";
+}
+
+function isIdeaItem(item: BrainItem): boolean {
+  return item.type === "idea" || item.type === "insight" || item.type === "product_note";
+}
+
+function isTaskOrReminderItem(item: BrainItem): boolean {
+  return item.type === "task" || item.type === "reminder";
+}
+
+function isContentItem(item: BrainItem): boolean {
+  return item.type === "content_idea" || item.category === "Контент";
+}
+
+function formatSummaryGroup(title: string, items: BrainItem[]): string[] {
+  const lines = [`${title}:`];
+
+  if (items.length === 0) {
+    return [...lines, "- нет"];
+  }
+
+  return [
+    ...lines,
+    ...items
+      .slice(0, SUMMARY_BULLET_LIMIT)
+      .map((item) => `- ${truncateTelegramItemText(getSummaryText(item), TELEGRAM_ITEM_TEXT_LIMIT)}`),
+  ];
+}
+
+function formatBrainSummary(period: "today" | "week", items: BrainItem[]): string {
+  const decisions = items.filter(isDecisionItem);
+  const ideas = items.filter(isIdeaItem);
+  const tasksAndReminders = items.filter(isTaskOrReminderItem);
+  const content = items.filter(isContentItem);
+  const groupedItemIds = new Set(
+    [...decisions, ...ideas, ...tasksAndReminders, ...content].map((item) => item.id)
+  );
+  const other = items.filter((item) => !groupedItemIds.has(item.id));
+  const periodLabel = period === "today" ? "сегодня" : "неделю";
+
+  return [
+    `🧠 Summary за ${periodLabel}`,
+    "",
+    `Записей: ${items.length}`,
+    "",
+    ...formatSummaryGroup("Решения", decisions),
+    "",
+    ...formatSummaryGroup("Идеи", ideas),
+    "",
+    ...formatSummaryGroup("Задачи/напоминания", tasksAndReminders),
+    "",
+    ...formatSummaryGroup("Контент", content),
+    "",
+    ...formatSummaryGroup("Прочее", other),
+  ].join("\n");
+}
+
+function incrementCount(counts: Map<string, number>, key: string): void {
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+}
+
+function formatTopCounts(counts: Map<string, number>): string[] {
+  const sortedCounts = Array.from(counts.entries())
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], "ru"))
+    .slice(0, 8);
+
+  if (sortedCounts.length === 0) {
+    return ["- нет"];
+  }
+
+  return sortedCounts.map(([name, count]) => `- ${name}: ${count}`);
+}
+
+function formatBrainStats(items: BrainItem[]): string {
+  const now = Date.now();
+  const categoryCounts = new Map<string, number>();
+  const typeCounts = new Map<string, number>();
+  let lastDayCount = 0;
+  let lastWeekCount = 0;
+
+  for (const item of items) {
+    const createdAt = new Date(item.createdAt).getTime();
+    const age = now - createdAt;
+
+    if (Number.isFinite(createdAt) && age <= ONE_DAY_MS) {
+      lastDayCount += 1;
+    }
+
+    if (Number.isFinite(createdAt) && age <= 7 * ONE_DAY_MS) {
+      lastWeekCount += 1;
+    }
+
+    incrementCount(categoryCounts, item.category || DEFAULT_BRAIN_ITEM_CATEGORY);
+    incrementCount(typeCounts, item.type || DEFAULT_BRAIN_ITEM_TYPE);
+  }
+
+  return [
+    "📊 Статистика второго мозга",
+    "",
+    `Всего активных записей: ${items.length}`,
+    `Inbox: ${categoryCounts.get(DEFAULT_BRAIN_ITEM_CATEGORY) ?? 0}`,
+    `За 24 часа: ${lastDayCount}`,
+    `За 7 дней: ${lastWeekCount}`,
+    "",
+    "Категории:",
+    ...formatTopCounts(categoryCounts),
+    "",
+    "Типы:",
+    ...formatTopCounts(typeCounts),
+  ].join("\n");
+}
+
 export async function POST(request: Request) {
   let update: TelegramUpdate | null = null;
 
@@ -150,8 +293,11 @@ export async function POST(request: Request) {
   const isInbox = isInboxCommand(parsedMessage.text);
   const isLast = isLastCommand(parsedMessage.text);
   const isSearch = isSearchCommand(parsedMessage.text);
+  const isHelp = isHelpCommand(parsedMessage.text);
+  const isSummary = isSummaryCommand(parsedMessage.text);
+  const isStats = isStatsCommand(parsedMessage.text);
 
-  if (!isSave && !isList && !isInbox && !isLast && !isSearch) {
+  if (!isSave && !isList && !isInbox && !isLast && !isSearch && !isHelp && !isSummary && !isStats) {
     console.info("Telegram message ignored: unsupported command", {
       chatId: parsedMessage.chatId,
       messageId: parsedMessage.messageId,
@@ -195,6 +341,11 @@ export async function POST(request: Request) {
     return okResponse();
   }
 
+  if (isHelp) {
+    await sendTelegramMessage(parsedMessage.chatId, formatHelpMessage());
+    return okResponse();
+  }
+
   if (isInbox) {
     try {
       const items = await getInboxBrainItems(10);
@@ -218,6 +369,68 @@ export async function POST(request: Request) {
       await sendTelegramMessage(
         parsedMessage.chatId,
         "Не смог загрузить Inbox. Попробуй позже."
+      );
+    }
+
+    return okResponse();
+  }
+
+  if (isSummary) {
+    const period = getSummaryPeriod(parsedMessage.text);
+
+    if (!period) {
+      await sendTelegramMessage(
+        parsedMessage.chatId,
+        "Напиши так: /summary today или /summary week"
+      );
+      return okResponse();
+    }
+
+    try {
+      const items = await getRecentBrainItems(period, SUMMARY_ITEM_LIMIT);
+
+      if (items.length === 0) {
+        await sendTelegramMessage(
+          parsedMessage.chatId,
+          period === "today" ? "За сегодня новых записей нет." : "За неделю новых записей нет."
+        );
+        return okResponse();
+      }
+
+      await sendTelegramMessage(parsedMessage.chatId, formatBrainSummary(period, items));
+    } catch (error) {
+      console.error(`Telegram /summary ${period} failed`, {
+        chatId: parsedMessage.chatId,
+        messageId: parsedMessage.messageId,
+        error,
+      });
+
+      await sendTelegramMessage(
+        parsedMessage.chatId,
+        period === "today"
+          ? "Не смог собрать summary за сегодня. Попробуй позже."
+          : "Не смог собрать summary за неделю. Попробуй позже."
+      );
+    }
+
+    return okResponse();
+  }
+
+  if (isStats) {
+    try {
+      const items = await getBrainItemsForStats(STATS_ITEM_LIMIT);
+
+      await sendTelegramMessage(parsedMessage.chatId, formatBrainStats(items));
+    } catch (error) {
+      console.error("Telegram /stats failed", {
+        chatId: parsedMessage.chatId,
+        messageId: parsedMessage.messageId,
+        error,
+      });
+
+      await sendTelegramMessage(
+        parsedMessage.chatId,
+        "Не смог загрузить статистику. Попробуй позже."
       );
     }
 

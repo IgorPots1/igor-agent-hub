@@ -112,6 +112,46 @@ export async function listLatestBrainItems(limit = 5): Promise<BrainItem[]> {
   return (data as BrainItemRow[]).map(mapBrainItemRow);
 }
 
+export async function listActiveBrainItemsSince(
+  sinceIso: string,
+  limit = 50
+): Promise<BrainItem[]> {
+  const supabase = createSupabaseServerClient();
+  const safeLimit = Math.min(Math.max(limit, 1), 100);
+
+  const { data, error } = await supabase
+    .from("brain_items")
+    .select("*")
+    .eq("status", DEFAULT_BRAIN_ITEM_STATUS)
+    .gte("created_at", sinceIso)
+    .order("created_at", { ascending: false })
+    .limit(safeLimit);
+
+  if (error) {
+    throw new Error(`Failed to list active brain items since ${sinceIso}: ${error.message}`);
+  }
+
+  return (data as BrainItemRow[]).map(mapBrainItemRow);
+}
+
+export async function listActiveBrainItemsForStats(limit = 500): Promise<BrainItem[]> {
+  const supabase = createSupabaseServerClient();
+  const safeLimit = Math.min(Math.max(limit, 1), 1000);
+
+  const { data, error } = await supabase
+    .from("brain_items")
+    .select("*")
+    .eq("status", DEFAULT_BRAIN_ITEM_STATUS)
+    .order("created_at", { ascending: false })
+    .limit(safeLimit);
+
+  if (error) {
+    throw new Error(`Failed to list active brain items for stats: ${error.message}`);
+  }
+
+  return (data as BrainItemRow[]).map(mapBrainItemRow);
+}
+
 export async function getLatestBrainItem(): Promise<BrainItem | null> {
   const supabase = createSupabaseServerClient();
 
