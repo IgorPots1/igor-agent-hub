@@ -1,4 +1,10 @@
-import { createBrainItemFromTelegram, isSaveCommand } from "@/features/brain/service";
+import {
+  createBrainItemFromTelegram,
+  getLatestBrainItems,
+  getSavedTelegramText,
+  isListCommand,
+  isSaveCommand,
+} from "@/features/brain/service";
 import { sendTelegramMessage } from "@/features/telegram/telegram-client";
 import { parseTelegramUpdate } from "@/features/telegram/parser";
 import type { TelegramUpdate } from "@/features/telegram/types";
@@ -18,6 +24,15 @@ export async function GET() {
   return okResponse();
 }
 
+function formatBrainItemsList(items: { rawText: string }[]): string {
+  const lines = items.map((item, index) => {
+    const compactText = item.rawText.replace(/\s+/g, " ").trim();
+    return `${index + 1}. ${compactText}`;
+  });
+
+  return ["🧠 Последние записи:", ...lines].join("\n");
+}
+
 export async function POST(request: Request) {
   let update: TelegramUpdate | null = null;
 
@@ -35,7 +50,10 @@ export async function POST(request: Request) {
     return okResponse();
   }
 
-  if (!isSaveCommand(parsedMessage.text)) {
+  const isSave = isSaveCommand(parsedMessage.text);
+  const isList = isListCommand(parsedMessage.text);
+
+  if (!isSave && !isList) {
     console.info("Telegram message ignored: unsupported command", {
       chatId: parsedMessage.chatId,
       messageId: parsedMessage.messageId,
@@ -43,26 +61,64 @@ export async function POST(request: Request) {
     return okResponse();
   }
 
+  if (isSave) {
+    const rawText = getSavedTelegramText(parsedMessage.text);
+
+    if (!rawText) {
+      await sendTelegramMessage(parsedMessage.chatId, "Напиши так: /save идея или мысль");
+      return okResponse();
+    }
+
+    try {
+      const brainItem = await createBrainItemFromTelegram(parsedMessage);
+      const chatId = parsedMessage.chatId;
+
+      await sendTelegramMessage(chatId, "✅ Сохранил во второй мозг");
+
+      console.info("Telegram brain item saved", {
+        chatId,
+        messageId: parsedMessage.messageId,
+        brainItemId: brainItem.id,
+      });
+    } catch (error) {
+      console.error("Telegram /save failed", {
+        chatId: parsedMessage.chatId,
+        messageId: parsedMessage.messageId,
+        error,
+      });
+
+      await sendTelegramMessage(
+        parsedMessage.chatId,
+        "Не смог сохранить. Попробуй ещё раз."
+      );
+    }
+
+    return okResponse();
+  }
+
   try {
-    const brainItem = await createBrainItemFromTelegram(parsedMessage);
-    const chatId = parsedMessage.chatId;
+    const items = await getLatestBrainItems(5);
 
-    await sendTelegramMessage(chatId, "Сохранил 👌");
+    if (items.length === 0) {
+      await sendTelegramMessage(
+        parsedMessage.chatId,
+        "Пока во втором мозге пусто. Добавь первую запись через /save"
+      );
+      return okResponse();
+    }
 
-    console.info("Telegram brain item saved", {
-      chatId,
-      messageId: parsedMessage.messageId,
-      brainItemId: brainItem.id,
-    });
+    await sendTelegramMessage(parsedMessage.chatId, formatBrainItemsList(items));
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown error while saving Telegram note";
-
-    console.error("Telegram /save failed", {
+    console.error("Telegram /list failed", {
       chatId: parsedMessage.chatId,
       messageId: parsedMessage.messageId,
-      error: message,
+      error,
     });
+
+    await sendTelegramMessage(
+      parsedMessage.chatId,
+      "Не смог загрузить список. Попробуй позже."
+    );
   }
 
   return okResponse();

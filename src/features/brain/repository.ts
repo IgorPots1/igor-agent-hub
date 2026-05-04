@@ -70,3 +70,19 @@ export async function createBrainItem(
 
   return mapBrainItemRow(data as BrainItemRow);
 }
+
+export async function listLatestBrainItems(limit = 5): Promise<BrainItem[]> {
+  const supabase = createSupabaseServerClient();
+
+  const { data, error } = await supabase
+    .from("brain_items")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(`Failed to list brain items: ${error.message}`);
+  }
+
+  return (data as BrainItemRow[]).map(mapBrainItemRow);
+}
