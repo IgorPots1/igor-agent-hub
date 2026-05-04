@@ -1,14 +1,17 @@
 import {
   createBrainItemFromTelegram,
   getInboxBrainItems,
+  getLatestBrainItem,
   getLatestBrainItems,
   getSavedTelegramText,
   isInboxCommand,
+  isLastCommand,
   isListCommand,
   isSaveCommand,
   tryClassifyBrainItem,
 } from "@/features/brain/service";
 import {
+  type BrainItem,
   DEFAULT_BRAIN_ITEM_CATEGORY,
   DEFAULT_BRAIN_ITEM_TYPE,
 } from "@/features/brain/types";
@@ -70,6 +73,40 @@ function formatInboxItemsList(items: { rawText: string; type: string }[]): strin
   return ["📥 Inbox:", ...lines].join("\n");
 }
 
+function formatBrainItemValue(value: string | null | undefined, fallback: string): string {
+  const normalizedValue = value?.trim();
+  return normalizedValue ? normalizedValue : fallback;
+}
+
+function formatBrainItemTags(tags: string[] | null | undefined): string {
+  if (!tags || tags.length === 0) {
+    return "—";
+  }
+
+  const normalizedTags = tags.map((tag) => tag.trim()).filter(Boolean);
+  return normalizedTags.length > 0 ? normalizedTags.join(", ") : "—";
+}
+
+function formatBrainItemSummary(summary: string | null | undefined): string {
+  const normalizedSummary = summary?.trim();
+  return normalizedSummary ? normalizedSummary : "—";
+}
+
+function formatLatestBrainItem(item: BrainItem): string {
+  return [
+    "🧠 Последняя запись",
+    "",
+    "Текст:",
+    formatBrainItemValue(item.rawText, "—"),
+    "",
+    `Категория: ${formatBrainItemValue(item.category, DEFAULT_BRAIN_ITEM_CATEGORY)}`,
+    `Тип: ${formatBrainItemValue(item.type, DEFAULT_BRAIN_ITEM_TYPE)}`,
+    `Теги: ${formatBrainItemTags(item.tags)}`,
+    "Summary:",
+    formatBrainItemSummary(item.summary),
+  ].join("\n");
+}
+
 export async function POST(request: Request) {
   let update: TelegramUpdate | null = null;
 
@@ -90,8 +127,9 @@ export async function POST(request: Request) {
   const isSave = isSaveCommand(parsedMessage.text);
   const isList = isListCommand(parsedMessage.text);
   const isInbox = isInboxCommand(parsedMessage.text);
+  const isLast = isLastCommand(parsedMessage.text);
 
-  if (!isSave && !isList && !isInbox) {
+  if (!isSave && !isList && !isInbox && !isLast) {
     console.info("Telegram message ignored: unsupported command", {
       chatId: parsedMessage.chatId,
       messageId: parsedMessage.messageId,
@@ -158,6 +196,35 @@ export async function POST(request: Request) {
       await sendTelegramMessage(
         parsedMessage.chatId,
         "Не смог загрузить Inbox. Попробуй позже."
+      );
+    }
+
+    return okResponse();
+  }
+
+  if (isLast) {
+    try {
+      const item = await getLatestBrainItem();
+
+      if (!item) {
+        await sendTelegramMessage(
+          parsedMessage.chatId,
+          "Во втором мозге пока нет записей. Добавь первую через /save"
+        );
+        return okResponse();
+      }
+
+      await sendTelegramMessage(parsedMessage.chatId, formatLatestBrainItem(item));
+    } catch (error) {
+      console.error("Telegram /last failed", {
+        chatId: parsedMessage.chatId,
+        messageId: parsedMessage.messageId,
+        error,
+      });
+
+      await sendTelegramMessage(
+        parsedMessage.chatId,
+        "Не смог загрузить последнюю запись. Попробуй позже."
       );
     }
 
