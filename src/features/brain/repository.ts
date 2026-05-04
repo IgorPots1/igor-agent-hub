@@ -1,4 +1,8 @@
-import type { CreateBrainItemInput, BrainItem } from "@/features/brain/types";
+import type {
+  BrainItem,
+  BrainItemClassification,
+  CreateBrainItemInput,
+} from "@/features/brain/types";
 import {
   DEFAULT_BRAIN_ITEM_CATEGORY,
   DEFAULT_BRAIN_ITEM_SOURCE,
@@ -94,4 +98,29 @@ export async function listLatestBrainItems(limit = 5): Promise<BrainItem[]> {
   }
 
   return (data as BrainItemRow[]).map(mapBrainItemRow);
+}
+
+export async function updateBrainItemClassification(
+  id: string,
+  classification: BrainItemClassification
+): Promise<BrainItem> {
+  const supabase = createSupabaseServerClient();
+
+  const { data, error } = await supabase
+    .from("brain_items")
+    .update({
+      type: classification.type,
+      category: classification.category,
+      tags: classification.tags,
+      summary: classification.summary,
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to update brain item classification: ${error.message}`);
+  }
+
+  return mapBrainItemRow(data as BrainItemRow);
 }

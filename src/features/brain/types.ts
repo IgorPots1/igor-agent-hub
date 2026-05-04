@@ -12,7 +12,7 @@ export const BRAIN_ITEM_TYPES = [
   "product_note",
 ] as const;
 
-export const DEFAULT_BRAIN_CATEGORIES = [
+export const BRAIN_ITEM_CATEGORIES = [
   "Inbox",
   "Run Club",
   "AI Running Coach",
@@ -24,8 +24,13 @@ export const DEFAULT_BRAIN_CATEGORIES = [
   "Личное",
 ] as const;
 
-export const DEFAULT_BRAIN_ITEM_TYPE = "note";
-export const DEFAULT_BRAIN_ITEM_CATEGORY = "Inbox";
+export const DEFAULT_BRAIN_CATEGORIES = BRAIN_ITEM_CATEGORIES;
+
+export type BrainItemType = (typeof BRAIN_ITEM_TYPES)[number];
+export type BrainItemCategory = (typeof BRAIN_ITEM_CATEGORIES)[number];
+
+export const DEFAULT_BRAIN_ITEM_TYPE: BrainItemType = "note";
+export const DEFAULT_BRAIN_ITEM_CATEGORY: BrainItemCategory = "Inbox";
 export const DEFAULT_BRAIN_ITEM_STATUS = "active";
 export const DEFAULT_BRAIN_ITEM_SOURCE = "telegram";
 
@@ -63,4 +68,11 @@ export type CreateBrainItemInput = {
   telegramUsername?: string | null;
   telegramMessageId?: string | null;
   status?: string;
+};
+
+export type BrainItemClassification = {
+  type: BrainItemType;
+  category: BrainItemCategory;
+  tags: string[];
+  summary: string | null;
 };

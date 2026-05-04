@@ -1,4 +1,9 @@
-import { createBrainItem, listLatestBrainItems } from "@/features/brain/repository";
+import { classifyBrainItem } from "@/features/brain/ai-classifier";
+import {
+  createBrainItem,
+  listLatestBrainItems,
+  updateBrainItemClassification,
+} from "@/features/brain/repository";
 import {
   DEFAULT_BRAIN_ITEM_CATEGORY,
   DEFAULT_BRAIN_ITEM_SOURCE,
@@ -44,6 +49,20 @@ export async function createBrainItemFromTelegram(
     telegramUsername: parsedMessage.username,
     telegramMessageId: String(parsedMessage.messageId),
   });
+}
+
+export async function tryClassifyBrainItem(item: BrainItem): Promise<BrainItem | null> {
+  try {
+    const classification = await classifyBrainItem(item.rawText);
+    return await updateBrainItemClassification(item.id, classification);
+  } catch (error) {
+    console.error("Brain item AI classification failed", {
+      brainItemId: item.id,
+      error,
+    });
+
+    return null;
+  }
 }
 
 export async function getLatestBrainItems(limit = 5): Promise<BrainItem[]> {

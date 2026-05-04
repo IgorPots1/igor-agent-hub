@@ -4,6 +4,7 @@ import {
   getSavedTelegramText,
   isListCommand,
   isSaveCommand,
+  tryClassifyBrainItem,
 } from "@/features/brain/service";
 import {
   DEFAULT_BRAIN_ITEM_CATEGORY,
@@ -82,6 +83,7 @@ export async function POST(request: Request) {
       const brainItem = await createBrainItemFromTelegram(parsedMessage);
       const chatId = parsedMessage.chatId;
 
+      await tryClassifyBrainItem(brainItem);
       await sendTelegramMessage(chatId, "✅ Сохранил во второй мозг");
 
       console.info("Telegram brain item saved", {
