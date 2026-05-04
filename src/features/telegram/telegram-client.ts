@@ -15,7 +15,7 @@ type TelegramApiResponse<T> = TelegramApiSuccess<T> | TelegramApiFailure;
 type TelegramFile = {
   file_id: string;
   file_unique_id: string;
-  file_path: string;
+  file_path?: string;
   file_size?: number;
 };
 
@@ -80,7 +80,7 @@ async function callTelegramApi<T>(
 export async function getTelegramFile(fileId: string): Promise<{
   fileId: string;
   fileUniqueId: string;
-  filePath: string;
+  filePath: string | null;
   fileSize: number | null;
 }> {
   const result = await callTelegramApi<TelegramFile>("getFile", {
@@ -90,7 +90,7 @@ export async function getTelegramFile(fileId: string): Promise<{
   return {
     fileId: result.file_id,
     fileUniqueId: result.file_unique_id,
-    filePath: result.file_path,
+    filePath: result.file_path ?? null,
     fileSize: result.file_size ?? null,
   };
 }

@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
 import path from "node:path";
 
 import type { ParsedTelegramUpdate } from "@/features/telegram/parser";
@@ -54,6 +54,34 @@ function truncateText(text: string, maxLength: number): string {
   }
 
   return `${symbols.slice(0, maxLength - 1).join("").trimEnd()}…`;
+}
+
+function getSanitizedErrorDetails(error: unknown): {
+  name: string;
+  message: string;
+  status: number | string | null;
+  code: number | string | null;
+} {
+  if (error instanceof Error) {
+    const errorWithMetadata = error as Error & {
+      status?: number | string;
+      code?: number | string;
+    };
+
+    return {
+      name: error.name,
+      message: error.message,
+      status: errorWithMetadata.status ?? null,
+      code: errorWithMetadata.code ?? null,
+    };
+  }
+
+  return {
+    name: "UnknownError",
+    message: typeof error === "string" ? error : "Unknown error",
+    status: null,
+    code: null,
+  };
 }
 
 function buildVoiceReplyPrefix(transcript: string): string {
@@ -190,9 +218,7 @@ async function transcribeTelegramVoice(
   const client = new OpenAI({
     apiKey: getOpenAiApiKey(),
   });
-  const audioBytes = Uint8Array.from(voiceData);
-
-  const audioFile = new File([audioBytes.buffer], fileName, {
+  const audioFile = await toFile(voiceData, fileName, {
     type: mimeType ?? "audio/ogg",
   });
   const response = await client.audio.transcriptions.create({
@@ -225,11 +251,47 @@ export async function handleTelegramVoiceMessage(
     return;
   }
 
+  const transcriptionModel = getTranscriptionModel();
+  let hasFilePath = false;
+  let downloadedBytes = 0;
+
+  console.info("Telegram voice handling started", {
+    duration: parsedMessage.voice.duration,
+    fileId: parsedMessage.voice.fileId,
+    hasFilePath,
+    downloadedBytes,
+    transcriptionModel,
+  });
+
   try {
     const telegramFile = await getTelegramFile(parsedMessage.voice.fileId);
+    hasFilePath = Boolean(telegramFile.filePath);
+
+    console.info("Telegram voice file resolved", {
+      duration: parsedMessage.voice.duration,
+      fileId: parsedMessage.voice.fileId,
+      hasFilePath,
+      downloadedBytes,
+      transcriptionModel,
+    });
+
+    if (!telegramFile.filePath) {
+      throw new Error("Telegram getFile returned no file_path");
+    }
+
     const fileExtension = path.extname(telegramFile.filePath) || ".oga";
     const fileName = `telegram-voice-${parsedMessage.messageId}${fileExtension}`;
     const downloadedFile = await downloadTelegramFile(telegramFile.filePath);
+    downloadedBytes = downloadedFile.buffer.byteLength;
+
+    console.info("Telegram voice file downloaded", {
+      duration: parsedMessage.voice.duration,
+      fileId: parsedMessage.voice.fileId,
+      hasFilePath,
+      downloadedBytes,
+      transcriptionModel,
+    });
+
     const transcript = await transcribeTelegramVoice(
       downloadedFile.buffer,
       fileName,
@@ -264,11 +326,24 @@ export async function handleTelegramVoiceMessage(
       saveSuccessMessage: "🎙️ Расшифровал и сохранил во второй мозг",
       replyPrefix: isVoiceSaveCommand ? null : buildVoiceReplyPrefix(transcript),
     });
+
+    console.info("Telegram voice handling completed", {
+      duration: parsedMessage.voice.duration,
+      fileId: parsedMessage.voice.fileId,
+      hasFilePath,
+      downloadedBytes,
+      transcriptionModel,
+    });
   } catch (error) {
     console.error("Telegram voice handling failed", {
       chatId: parsedMessage.chatId,
       messageId: parsedMessage.messageId,
-      error,
+      duration: parsedMessage.voice.duration,
+      fileId: parsedMessage.voice.fileId,
+      hasFilePath,
+      downloadedBytes,
+      transcriptionModel,
+      error: getSanitizedErrorDetails(error),
     });
 
     await sendTelegramMessage(parsedMessage.chatId, TRANSCRIPTION_FAILED_MESSAGE);

@@ -1,7 +1,12 @@
 import { handleTelegramCommand } from "@/features/telegram/command-handler";
 import { parseTelegramUpdate } from "@/features/telegram/parser";
 import type { TelegramUpdate } from "@/features/telegram/types";
-import { handleTelegramVoiceMessage } from "@/features/telegram/voice";
+import {
+  handleTelegramVoiceMessage,
+  normalizeVoiceTranscriptToCommand,
+} from "@/features/telegram/voice";
+
+export const runtime = "nodejs";
 
 const jsonHeaders = {
   "Content-Type": "application/json",
@@ -37,6 +42,17 @@ export async function POST(request: Request) {
   if (parsedMessage.voice) {
     await handleTelegramVoiceMessage(parsedMessage);
     return okResponse();
+  }
+
+  if (parsedMessage.text && !parsedMessage.text.startsWith("/")) {
+    const normalizedCommand = normalizeVoiceTranscriptToCommand(parsedMessage.text);
+
+    if (normalizedCommand) {
+      await handleTelegramCommand(parsedMessage, {
+        messageText: normalizedCommand,
+      });
+      return okResponse();
+    }
   }
 
   await handleTelegramCommand(parsedMessage);
