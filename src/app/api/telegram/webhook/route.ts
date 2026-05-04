@@ -1,4 +1,5 @@
 import { createBrainItemFromTelegram, isSaveCommand } from "@/features/brain/service";
+import { sendTelegramMessage } from "@/features/telegram/telegram-client";
 import { parseTelegramUpdate } from "@/features/telegram/parser";
 import type { TelegramUpdate } from "@/features/telegram/types";
 
@@ -44,9 +45,12 @@ export async function POST(request: Request) {
 
   try {
     const brainItem = await createBrainItemFromTelegram(parsedMessage);
+    const chatId = parsedMessage.chatId;
+
+    await sendTelegramMessage(chatId, "Сохранил 👌");
 
     console.info("Telegram brain item saved", {
-      chatId: parsedMessage.chatId,
+      chatId,
       messageId: parsedMessage.messageId,
       brainItemId: brainItem.id,
     });
