@@ -1,40 +1,27 @@
-import { NextResponse } from "next/server";
-import { routeAgentInput } from "@/features/agents/router-agent";
-import { parseTelegramUpdate } from "@/features/telegram/parser";
-import type { TelegramUpdate } from "@/features/telegram/types";
+const jsonHeaders = {
+  "Content-Type": "application/json",
+};
 
-function safeSerializeUpdate(update: TelegramUpdate): string {
-  try {
-    return JSON.stringify(update);
-  } catch {
-    return "[unserializable telegram update]";
-  }
-}
-
-export async function GET() {
-  return NextResponse.json({
-    ok: true,
-    route: "/api/telegram/webhook"
+function okResponse() {
+  return new Response(JSON.stringify({ ok: true }), {
+    status: 200,
+    headers: jsonHeaders,
   });
 }
 
+export async function GET() {
+  return okResponse();
+}
+
 export async function POST(request: Request) {
+  let update: unknown = null;
+
   try {
-    const update = (await request.json()) as TelegramUpdate;
-
-    console.info("Telegram update received", safeSerializeUpdate(update));
-
-    const parsedUpdate = parseTelegramUpdate(update);
-    const messageText = parsedUpdate?.text ?? null;
-    const agentType = messageText ? routeAgentInput(messageText) : "unknown";
-
-    console.info("Telegram message text", messageText);
-    console.info("Telegram route result", agentType);
-
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    console.error("Telegram webhook error", error);
-
-    return NextResponse.json({ ok: false }, { status: 500 });
+    update = await request.json();
+  } catch {
+    console.warn("Telegram webhook received invalid JSON payload");
   }
+
+  console.info("Telegram update received", update);
+  return okResponse();
 }
