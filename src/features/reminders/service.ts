@@ -338,13 +338,15 @@ function getManualReminderRelativeIso(
 }
 
 export function parseManualReminder(text: string, now = new Date()): ParsedManualReminder | null {
-  const normalizedText = text.trim();
+  const normalizedText = text.trim().replace(/[.,!?]+$/u, "").trim();
 
   if (!normalizedText) {
     return null;
   }
 
-  const reminderText = normalizedText.replace(/^напомни(?:\s+|$)/i, "").trim();
+  const reminderText = normalizedText
+    .replace(/^(?:напомнить|напомни)(?:\s+|$)/i, "")
+    .trim();
 
   if (!reminderText) {
     return null;
@@ -360,23 +362,29 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
   const tomorrow = addLocalDays(today.year, today.month, today.day, 1);
   const dayAfterTomorrow = addLocalDays(today.year, today.month, today.day, 2);
 
-  const buildResult = (matchedPrefix: string, remindAt: string | null): ParsedManualReminder | null => {
+  const buildResultFromRawText = (
+    rawText: string,
+    remindAt: string | null
+  ): ParsedManualReminder | null => {
     if (!remindAt) {
       return null;
     }
 
-    const rawText = reminderText.slice(matchedPrefix.length).trim();
+    const normalizedRawText = rawText.replace(/\s+/g, " ").trim();
 
-    if (!rawText) {
+    if (!normalizedRawText) {
       return null;
     }
 
     return {
-      rawText,
+      rawText: normalizedRawText,
       remindAt,
       formattedLocalDateTime: formatBelgradeLocalDateTime(remindAt),
     };
   };
+
+  const buildResult = (matchedPrefix: string, remindAt: string | null): ParsedManualReminder | null =>
+    buildResultFromRawText(reminderText.slice(matchedPrefix.length), remindAt);
 
   const todayEveningMatch = reminderText.match(/^сегодня\s+вечером(?:\s+|$)/i);
 
@@ -441,6 +449,28 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
         targetDay.day,
         Number(namedDayTimeMatch[2]),
         Number(namedDayTimeMatch[3]),
+        now
+      )
+    );
+  }
+
+  const namedDayTrailingTimeMatch = reminderText.match(
+    /^(сегодня|завтра|послезавтра)\s+(.+?)\s+(?:в\s+)?(\d{1,2}):(\d{2})$/i
+  );
+
+  if (namedDayTrailingTimeMatch) {
+    const dayToken = namedDayTrailingTimeMatch[1].toLocaleLowerCase("ru");
+    const targetDay =
+      dayToken === "сегодня" ? today : dayToken === "завтра" ? tomorrow : dayAfterTomorrow;
+
+    return buildResultFromRawText(
+      namedDayTrailingTimeMatch[2],
+      createBelgradeIsoIfFuture(
+        targetDay.year,
+        targetDay.month,
+        targetDay.day,
+        Number(namedDayTrailingTimeMatch[3]),
+        Number(namedDayTrailingTimeMatch[4]),
         now
       )
     );

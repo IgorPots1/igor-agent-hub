@@ -120,12 +120,26 @@ function normalizeSearchVoiceCommand(transcript: string): string | null {
 }
 
 function normalizeReminderVoiceCommand(transcript: string): string | null {
+  const explicitReminderPatterns = [
+    /^(?:пожалуйста\s+напомни)(?:\s+|$)/iu,
+    /^(?:напомни\s+пожалуйста)(?:\s+|$)/iu,
+    /^(?:напомнить)(?:\s+|$)/iu,
+    /^(?:напомни)(?:\s+|$)/iu,
+  ];
+
+  for (const pattern of explicitReminderPatterns) {
+    const payload = extractCommandPayload(transcript, pattern);
+
+    if (payload) {
+      return `/remind ${payload}`;
+    }
+  }
+
   if (!parseManualReminder(transcript)) {
     return null;
   }
 
-  const payload = extractCommandPayload(transcript, /^напомни(?:\s+|$)/iu);
-  return `/remind ${payload ?? transcript}`;
+  return `/remind ${normalizeWhitespace(transcript)}`;
 }
 
 function getTelegramVoiceUploadFileName(filePath: string | null | undefined): string {
