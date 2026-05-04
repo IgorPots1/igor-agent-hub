@@ -5,6 +5,10 @@ import {
   isListCommand,
   isSaveCommand,
 } from "@/features/brain/service";
+import {
+  DEFAULT_BRAIN_ITEM_CATEGORY,
+  DEFAULT_BRAIN_ITEM_TYPE,
+} from "@/features/brain/types";
 import { sendTelegramMessage } from "@/features/telegram/telegram-client";
 import { parseTelegramUpdate } from "@/features/telegram/parser";
 import type { TelegramUpdate } from "@/features/telegram/types";
@@ -24,10 +28,15 @@ export async function GET() {
   return okResponse();
 }
 
-function formatBrainItemsList(items: { rawText: string }[]): string {
+function formatBrainItemsList(
+  items: { rawText: string; category: string; type: string }[]
+): string {
   const lines = items.map((item, index) => {
     const compactText = item.rawText.replace(/\s+/g, " ").trim();
-    return `${index + 1}. ${compactText}`;
+    const category = item.category || DEFAULT_BRAIN_ITEM_CATEGORY;
+    const type = item.type || DEFAULT_BRAIN_ITEM_TYPE;
+
+    return `${index + 1}. [${category}/${type}] ${compactText}`;
   });
 
   return ["🧠 Последние записи:", ...lines].join("\n");

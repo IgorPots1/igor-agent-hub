@@ -1,4 +1,10 @@
 import type { CreateBrainItemInput, BrainItem } from "@/features/brain/types";
+import {
+  DEFAULT_BRAIN_ITEM_CATEGORY,
+  DEFAULT_BRAIN_ITEM_SOURCE,
+  DEFAULT_BRAIN_ITEM_STATUS,
+  DEFAULT_BRAIN_ITEM_TYPE,
+} from "@/features/brain/types";
 import { createSupabaseServerClient } from "@/features/supabase/server";
 
 type BrainItemRow = {
@@ -6,16 +12,17 @@ type BrainItemRow = {
   raw_text: string;
   cleaned_text: string | null;
   summary: string | null;
-  type: string;
+  type: string | null;
+  category: string | null;
   project: string | null;
   topic: string | null;
-  tags: string[];
-  source: string;
+  tags: string[] | null;
+  source: string | null;
   telegram_chat_id: string | null;
   telegram_user_id: string | null;
   telegram_username: string | null;
   telegram_message_id: string | null;
-  status: string;
+  status: string | null;
   created_at: string;
 };
 
@@ -25,16 +32,17 @@ function mapBrainItemRow(row: BrainItemRow): BrainItem {
     rawText: row.raw_text,
     cleanedText: row.cleaned_text,
     summary: row.summary,
-    type: row.type,
+    type: row.type ?? DEFAULT_BRAIN_ITEM_TYPE,
+    category: row.category ?? DEFAULT_BRAIN_ITEM_CATEGORY,
     project: row.project,
     topic: row.topic,
-    tags: row.tags,
-    source: row.source,
+    tags: row.tags ?? [],
+    source: row.source ?? DEFAULT_BRAIN_ITEM_SOURCE,
     telegramChatId: row.telegram_chat_id,
     telegramUserId: row.telegram_user_id,
     telegramUsername: row.telegram_username,
     telegramMessageId: row.telegram_message_id,
-    status: row.status,
+    status: row.status ?? DEFAULT_BRAIN_ITEM_STATUS,
     createdAt: row.created_at,
   };
 }
@@ -50,16 +58,17 @@ export async function createBrainItem(
       raw_text: input.rawText,
       cleaned_text: input.cleanedText ?? null,
       summary: input.summary ?? null,
-      type: input.type ?? "note",
+      type: input.type ?? DEFAULT_BRAIN_ITEM_TYPE,
+      category: input.category ?? DEFAULT_BRAIN_ITEM_CATEGORY,
       project: input.project ?? null,
       topic: input.topic ?? null,
       tags: input.tags ?? [],
-      source: input.source ?? "telegram",
+      source: input.source ?? DEFAULT_BRAIN_ITEM_SOURCE,
       telegram_chat_id: input.telegramChatId ?? null,
       telegram_user_id: input.telegramUserId ?? null,
       telegram_username: input.telegramUsername ?? null,
       telegram_message_id: input.telegramMessageId ?? null,
-      status: input.status ?? "inbox",
+      status: input.status ?? DEFAULT_BRAIN_ITEM_STATUS,
     })
     .select("*")
     .single();

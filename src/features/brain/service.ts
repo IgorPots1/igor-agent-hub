@@ -1,4 +1,10 @@
 import { createBrainItem, listLatestBrainItems } from "@/features/brain/repository";
+import {
+  DEFAULT_BRAIN_ITEM_CATEGORY,
+  DEFAULT_BRAIN_ITEM_SOURCE,
+  DEFAULT_BRAIN_ITEM_STATUS,
+  DEFAULT_BRAIN_ITEM_TYPE,
+} from "@/features/brain/types";
 import type { BrainItem } from "@/features/brain/types";
 import type { ParsedTelegramUpdate } from "@/features/telegram/parser";
 
@@ -28,8 +34,11 @@ export async function createBrainItemFromTelegram(
 
   return createBrainItem({
     rawText,
-    source: "telegram",
-    status: "inbox",
+    type: DEFAULT_BRAIN_ITEM_TYPE,
+    category: DEFAULT_BRAIN_ITEM_CATEGORY,
+    tags: [],
+    source: DEFAULT_BRAIN_ITEM_SOURCE,
+    status: DEFAULT_BRAIN_ITEM_STATUS,
     telegramChatId: String(parsedMessage.chatId),
     telegramUserId: parsedMessage.userId === null ? null : String(parsedMessage.userId),
     telegramUsername: parsedMessage.username,
