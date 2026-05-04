@@ -34,6 +34,15 @@ const STATS_COMMAND_PATTERN = /^\/stats(?:@\w+)?(?:\s+|$)/;
 const REMIND_COMMAND_PATTERN = /^\/remind(?:@\w+)?(?:\s+|$)/;
 const REMINDERS_COMMAND_PATTERN = /^\/reminders(?:@\w+)?(?:\s+|$)/;
 
+type TelegramBrainItemOptions = {
+  rawText?: string;
+  type?: string;
+  category?: string;
+  tags?: string[];
+  source?: string;
+  status?: string;
+};
+
 export function isSaveCommand(text: string): boolean {
   return SAVE_COMMAND_PATTERN.test(text);
 }
@@ -96,27 +105,46 @@ export function getSummaryPeriod(text: string): "today" | "week" | null {
   return null;
 }
 
-export async function createBrainItemFromTelegram(
-  parsedMessage: ParsedTelegramUpdate
-): Promise<BrainItem> {
-  const rawText = getSavedTelegramText(parsedMessage.text ?? "");
+function getUniqueTags(tags: string[]): string[] {
+  return Array.from(new Set(tags.map((tag) => tag.trim()).filter(Boolean)));
+}
 
-  if (!rawText) {
-    throw new Error("Telegram /save command is missing note content");
+export async function createTelegramBrainItem(
+  parsedMessage: ParsedTelegramUpdate,
+  rawText: string,
+  options: TelegramBrainItemOptions = {}
+): Promise<BrainItem> {
+  const normalizedRawText = rawText.trim();
+
+  if (!normalizedRawText) {
+    throw new Error("Telegram brain item is missing note content");
   }
 
   return createBrainItem({
-    rawText,
-    type: DEFAULT_BRAIN_ITEM_TYPE,
-    category: DEFAULT_BRAIN_ITEM_CATEGORY,
-    tags: [],
-    source: DEFAULT_BRAIN_ITEM_SOURCE,
-    status: DEFAULT_BRAIN_ITEM_STATUS,
+    rawText: normalizedRawText,
+    type: options.type ?? DEFAULT_BRAIN_ITEM_TYPE,
+    category: options.category ?? DEFAULT_BRAIN_ITEM_CATEGORY,
+    tags: getUniqueTags(options.tags ?? []),
+    source: options.source ?? DEFAULT_BRAIN_ITEM_SOURCE,
+    status: options.status ?? DEFAULT_BRAIN_ITEM_STATUS,
     telegramChatId: String(parsedMessage.chatId),
     telegramUserId: parsedMessage.userId === null ? null : String(parsedMessage.userId),
     telegramUsername: parsedMessage.username,
     telegramMessageId: String(parsedMessage.messageId),
   });
+}
+
+export async function createBrainItemFromTelegram(
+  parsedMessage: ParsedTelegramUpdate,
+  options: TelegramBrainItemOptions = {}
+): Promise<BrainItem> {
+  const rawText = options.rawText ?? getSavedTelegramText(parsedMessage.text ?? "");
+
+  if (!rawText) {
+    throw new Error("Telegram /save command is missing note content");
+  }
+
+  return createTelegramBrainItem(parsedMessage, rawText, options);
 }
 
 export async function createForwardedBrainItemFromTelegram(
@@ -144,7 +172,8 @@ export async function createForwardedBrainItemFromTelegram(
 
 export async function createReminderBrainItemFromTelegram(
   parsedMessage: ParsedTelegramUpdate,
-  rawText: string
+  rawText: string,
+  options: TelegramBrainItemOptions = {}
 ): Promise<BrainItem> {
   const normalizedText = rawText.trim();
 
@@ -154,11 +183,11 @@ export async function createReminderBrainItemFromTelegram(
 
   return createBrainItem({
     rawText: normalizedText,
-    type: "reminder",
-    category: DEFAULT_BRAIN_ITEM_CATEGORY,
-    tags: [getManualReminderTag()],
-    source: DEFAULT_BRAIN_ITEM_SOURCE,
-    status: DEFAULT_BRAIN_ITEM_STATUS,
+    type: options.type ?? "reminder",
+    category: options.category ?? DEFAULT_BRAIN_ITEM_CATEGORY,
+    tags: getUniqueTags([...(options.tags ?? []), getManualReminderTag()]),
+    source: options.source ?? DEFAULT_BRAIN_ITEM_SOURCE,
+    status: options.status ?? DEFAULT_BRAIN_ITEM_STATUS,
     telegramChatId: String(parsedMessage.chatId),
     telegramUserId: parsedMessage.userId === null ? null : String(parsedMessage.userId),
     telegramUsername: parsedMessage.username,
@@ -166,10 +195,18 @@ export async function createReminderBrainItemFromTelegram(
   });
 }
 
-export async function tryClassifyBrainItem(item: BrainItem): Promise<BrainItem | null> {
+export async function tryClassifyBrainItem(
+  item: BrainItem,
+  options: { preserveTags?: string[] } = {}
+): Promise<BrainItem | null> {
   try {
     const classification = await classifyBrainItem(item.rawText);
-    return await updateBrainItemClassification(item.id, classification);
+    const mergedTags = getUniqueTags([...(options.preserveTags ?? []), ...classification.tags]);
+
+    return await updateBrainItemClassification(item.id, {
+      ...classification,
+      tags: mergedTags,
+    });
   } catch (error) {
     console.error("Brain item AI classification failed", {
       brainItemId: item.id,

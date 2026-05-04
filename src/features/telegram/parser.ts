@@ -6,6 +6,12 @@ export type ParsedTelegramUpdate = {
   userId: number | null;
   username: string | null;
   text: string | null;
+  voice: {
+    fileId: string;
+    duration: number;
+    mimeType: string | null;
+    fileSize: number | null;
+  } | null;
   messageId: number;
   isForwarded: boolean;
 };
@@ -32,6 +38,14 @@ export function parseTelegramUpdate(
     userId: message.from?.id ?? null,
     username: message.from?.username ?? null,
     text,
+    voice: message.voice
+      ? {
+          fileId: message.voice.file_id,
+          duration: message.voice.duration,
+          mimeType: message.voice.mime_type ?? null,
+          fileSize: message.voice.file_size ?? null,
+        }
+      : null,
     messageId: message.message_id,
     isForwarded,
   };
