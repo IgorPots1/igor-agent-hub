@@ -5,6 +5,16 @@ export type TelegramUser = {
 
 export type TelegramChat = {
   id: number;
+  title?: string;
+  username?: string;
+};
+
+export type TelegramForwardOrigin = {
+  type: string;
+  sender_user?: TelegramUser;
+  sender_user_name?: string;
+  chat?: TelegramChat;
+  message_id?: number;
 };
 
 export type TelegramMessage = {
@@ -12,6 +22,11 @@ export type TelegramMessage = {
   chat: TelegramChat;
   from?: TelegramUser;
   text?: string;
+  caption?: string;
+  forward_origin?: TelegramForwardOrigin;
+  forward_from?: TelegramUser;
+  forward_sender_name?: string;
+  forward_from_chat?: TelegramChat;
 };
 
 export type TelegramUpdate = {

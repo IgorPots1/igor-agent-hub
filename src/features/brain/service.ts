@@ -10,6 +10,10 @@ import {
   updateBrainItemClassification,
 } from "@/features/brain/repository";
 import {
+  getEveningReviewTag,
+  getForwardedTaskCategory,
+} from "@/features/reminders/service";
+import {
   DEFAULT_BRAIN_ITEM_CATEGORY,
   DEFAULT_BRAIN_ITEM_SOURCE,
   DEFAULT_BRAIN_ITEM_STATUS,
@@ -26,6 +30,7 @@ const SEARCH_COMMAND_PATTERN = /^\/search(?:@\w+)?(?:\s+|$)/;
 const HELP_COMMAND_PATTERN = /^\/help(?:@\w+)?(?:\s+|$)/;
 const SUMMARY_COMMAND_PATTERN = /^\/summary(?:@\w+)?(?:\s+|$)/;
 const STATS_COMMAND_PATTERN = /^\/stats(?:@\w+)?(?:\s+|$)/;
+const REMINDERS_COMMAND_PATTERN = /^\/reminders(?:@\w+)?(?:\s+|$)/;
 
 export function isSaveCommand(text: string): boolean {
   return SAVE_COMMAND_PATTERN.test(text);
@@ -59,6 +64,10 @@ export function isStatsCommand(text: string): boolean {
   return STATS_COMMAND_PATTERN.test(text);
 }
 
+export function isRemindersCommand(text: string): boolean {
+  return REMINDERS_COMMAND_PATTERN.test(text);
+}
+
 export function getSavedTelegramText(text: string): string {
   return text.replace(SAVE_COMMAND_PATTERN, "").trim();
 }
@@ -80,7 +89,7 @@ export function getSummaryPeriod(text: string): "today" | "week" | null {
 export async function createBrainItemFromTelegram(
   parsedMessage: ParsedTelegramUpdate
 ): Promise<BrainItem> {
-  const rawText = getSavedTelegramText(parsedMessage.text);
+  const rawText = getSavedTelegramText(parsedMessage.text ?? "");
 
   if (!rawText) {
     throw new Error("Telegram /save command is missing note content");
@@ -92,6 +101,29 @@ export async function createBrainItemFromTelegram(
     category: DEFAULT_BRAIN_ITEM_CATEGORY,
     tags: [],
     source: DEFAULT_BRAIN_ITEM_SOURCE,
+    status: DEFAULT_BRAIN_ITEM_STATUS,
+    telegramChatId: String(parsedMessage.chatId),
+    telegramUserId: parsedMessage.userId === null ? null : String(parsedMessage.userId),
+    telegramUsername: parsedMessage.username,
+    telegramMessageId: String(parsedMessage.messageId),
+  });
+}
+
+export async function createForwardedBrainItemFromTelegram(
+  parsedMessage: ParsedTelegramUpdate
+): Promise<BrainItem> {
+  const rawText = parsedMessage.text?.trim();
+
+  if (!rawText) {
+    throw new Error("Forwarded Telegram message is missing text content");
+  }
+
+  return createBrainItem({
+    rawText,
+    type: "task",
+    category: getForwardedTaskCategory(rawText),
+    tags: [getEveningReviewTag()],
+    source: "telegram_forward",
     status: DEFAULT_BRAIN_ITEM_STATUS,
     telegramChatId: String(parsedMessage.chatId),
     telegramUserId: parsedMessage.userId === null ? null : String(parsedMessage.userId),
