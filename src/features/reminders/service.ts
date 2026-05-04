@@ -344,6 +344,12 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
     return null;
   }
 
+  const reminderText = normalizedText.replace(/^напомни(?:\s+|$)/i, "").trim();
+
+  if (!reminderText) {
+    return null;
+  }
+
   const localNow = getZonedDateParts(now);
   const currentMinutes = localNow.hour * 60 + localNow.minute;
   const today = {
@@ -359,7 +365,7 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
       return null;
     }
 
-    const rawText = normalizedText.slice(matchedPrefix.length).trim();
+    const rawText = reminderText.slice(matchedPrefix.length).trim();
 
     if (!rawText) {
       return null;
@@ -372,7 +378,7 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
     };
   };
 
-  const todayEveningMatch = normalizedText.match(/^сегодня\s+вечером(?:\s+|$)/i);
+  const todayEveningMatch = reminderText.match(/^сегодня\s+вечером(?:\s+|$)/i);
 
   if (todayEveningMatch) {
     return buildResult(
@@ -381,7 +387,7 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
     );
   }
 
-  const tomorrowEveningMatch = normalizedText.match(/^завтра\s+вечером(?:\s+|$)/i);
+  const tomorrowEveningMatch = reminderText.match(/^завтра\s+вечером(?:\s+|$)/i);
 
   if (tomorrowEveningMatch) {
     return buildResult(
@@ -390,7 +396,7 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
     );
   }
 
-  const eveningMatch = normalizedText.match(/^вечером(?:\s+|$)/i);
+  const eveningMatch = reminderText.match(/^вечером(?:\s+|$)/i);
 
   if (eveningMatch) {
     const targetDay = currentMinutes < 19 * 60 ? today : tomorrow;
@@ -401,7 +407,7 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
     );
   }
 
-  const relativeMatch = normalizedText.match(
+  const relativeMatch = reminderText.match(
     /^через\s+(\d+)\s+(минут(?:у|ы)?|минут|час(?:а|ов)?|час|день|дня|дней)(?:\s+|$)/i
   );
 
@@ -418,8 +424,8 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
     return buildResult(relativeMatch[0], getManualReminderRelativeIso(amount, unit, now));
   }
 
-  const namedDayTimeMatch = normalizedText.match(
-    /^(сегодня|завтра|послезавтра)\s+(\d{1,2}):(\d{2})(?:\s+|$)/i
+  const namedDayTimeMatch = reminderText.match(
+    /^(сегодня|завтра|послезавтра)\s+(?:в\s+)?(\d{1,2}):(\d{2})(?:\s+|$)/i
   );
 
   if (namedDayTimeMatch) {
@@ -440,7 +446,7 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
     );
   }
 
-  const isoDateTimeMatch = normalizedText.match(
+  const isoDateTimeMatch = reminderText.match(
     /^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})(?:\s+|$)/
   );
 
@@ -458,7 +464,7 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
     );
   }
 
-  const dottedDateTimeMatch = normalizedText.match(
+  const dottedDateTimeMatch = reminderText.match(
     /^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{1,2}):(\d{2})(?:\s+|$)/
   );
 
@@ -476,7 +482,7 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
     );
   }
 
-  const implicitTimeMatch = normalizedText.match(/^в\s+(\d{1,2}):(\d{2})(?:\s+|$)/i);
+  const implicitTimeMatch = reminderText.match(/^в\s+(\d{1,2}):(\d{2})(?:\s+|$)/i);
 
   if (implicitTimeMatch) {
     const hour = Number(implicitTimeMatch[1]);

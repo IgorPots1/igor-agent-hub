@@ -1,6 +1,7 @@
 import OpenAI, { toFile } from "openai";
 import path from "node:path";
 
+import { parseManualReminder } from "@/features/reminders/service";
 import type { ParsedTelegramUpdate } from "@/features/telegram/parser";
 import { handleTelegramCommand } from "@/features/telegram/command-handler";
 import {
@@ -18,6 +19,8 @@ const TRANSCRIPTION_FAILED_MESSAGE =
 const TRANSCRIPTION_UNAVAILABLE_MESSAGE =
   "Голосовые пока недоступны: не настроено распознавание.";
 const MAX_TRANSCRIPT_PREVIEW_LENGTH = 90;
+const TELEGRAM_VOICE_UPLOAD_FILE_NAME = "voice.ogg";
+const TELEGRAM_VOICE_UPLOAD_MIME_TYPE = "audio/ogg";
 
 function getOpenAiApiKey(): string {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -116,6 +119,35 @@ function normalizeSearchVoiceCommand(transcript: string): string | null {
   return `/search ${payload}`;
 }
 
+function normalizeReminderVoiceCommand(transcript: string): string | null {
+  if (!parseManualReminder(transcript)) {
+    return null;
+  }
+
+  const payload = extractCommandPayload(transcript, /^напомни(?:\s+|$)/iu);
+  return `/remind ${payload ?? transcript}`;
+}
+
+function getTelegramVoiceUploadFileName(filePath: string | null | undefined): string {
+  const extension = path.extname(filePath ?? "").toLowerCase();
+
+  if (extension === ".oga" || extension === ".ogg") {
+    return TELEGRAM_VOICE_UPLOAD_FILE_NAME;
+  }
+
+  return TELEGRAM_VOICE_UPLOAD_FILE_NAME;
+}
+
+function getTelegramVoiceUploadMimeType(mimeType: string | null | undefined): string {
+  const normalizedMimeType = mimeType?.trim().toLowerCase();
+
+  if (!normalizedMimeType || normalizedMimeType === "application/octet-stream") {
+    return TELEGRAM_VOICE_UPLOAD_MIME_TYPE;
+  }
+
+  return normalizedMimeType;
+}
+
 export function normalizeVoiceTranscriptToCommand(transcript: string): string | null {
   const normalizedTranscript = normalizeWhitespace(transcript);
   const normalizedForMatching = normalizeForMatching(normalizedTranscript);
@@ -150,9 +182,10 @@ export function normalizeVoiceTranscriptToCommand(transcript: string): string | 
     return "/reminders";
   }
 
-  if (/^напомни(?:\s+|$)/iu.test(normalizedTranscript)) {
-    const payload = extractCommandPayload(normalizedTranscript, /^напомни(?:\s+|$)/iu);
-    return payload ? `/remind ${payload}` : null;
+  const reminderCommand = normalizeReminderVoiceCommand(normalizedTranscript);
+
+  if (reminderCommand) {
+    return reminderCommand;
   }
 
   if (
@@ -254,6 +287,8 @@ export async function handleTelegramVoiceMessage(
   const transcriptionModel = getTranscriptionModel();
   let hasFilePath = false;
   let downloadedBytes = 0;
+  let uploadFileName = TELEGRAM_VOICE_UPLOAD_FILE_NAME;
+  let uploadMimeType = TELEGRAM_VOICE_UPLOAD_MIME_TYPE;
 
   console.info("Telegram voice handling started", {
     duration: parsedMessage.voice.duration,
@@ -279,23 +314,27 @@ export async function handleTelegramVoiceMessage(
       throw new Error("Telegram getFile returned no file_path");
     }
 
-    const fileExtension = path.extname(telegramFile.filePath) || ".oga";
-    const fileName = `telegram-voice-${parsedMessage.messageId}${fileExtension}`;
     const downloadedFile = await downloadTelegramFile(telegramFile.filePath);
     downloadedBytes = downloadedFile.buffer.byteLength;
+    uploadFileName = getTelegramVoiceUploadFileName(telegramFile.filePath);
+    uploadMimeType = getTelegramVoiceUploadMimeType(
+      parsedMessage.voice.mimeType ?? downloadedFile.contentType
+    );
 
     console.info("Telegram voice file downloaded", {
       duration: parsedMessage.voice.duration,
       fileId: parsedMessage.voice.fileId,
       hasFilePath,
       downloadedBytes,
+      uploadFileName,
+      uploadMimeType,
       transcriptionModel,
     });
 
     const transcript = await transcribeTelegramVoice(
       downloadedFile.buffer,
-      fileName,
-      parsedMessage.voice.mimeType ?? downloadedFile.contentType
+      uploadFileName,
+      uploadMimeType
     );
 
     if (!transcript) {
@@ -332,6 +371,8 @@ export async function handleTelegramVoiceMessage(
       fileId: parsedMessage.voice.fileId,
       hasFilePath,
       downloadedBytes,
+      uploadFileName,
+      uploadMimeType,
       transcriptionModel,
     });
   } catch (error) {
@@ -342,6 +383,8 @@ export async function handleTelegramVoiceMessage(
       fileId: parsedMessage.voice.fileId,
       hasFilePath,
       downloadedBytes,
+      uploadFileName,
+      uploadMimeType,
       transcriptionModel,
       error: getSanitizedErrorDetails(error),
     });
