@@ -9,6 +9,7 @@ export const runtime = "nodejs";
 const jsonHeaders = {
   "Content-Type": "application/json",
 };
+
 function okResponse() {
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,
@@ -17,7 +18,17 @@ function okResponse() {
 }
 
 export async function GET() {
-  return okResponse();
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      app: "second-brain",
+      marker: "second-brain-full-2026-05-05",
+    }),
+    {
+      status: 200,
+      headers: jsonHeaders,
+    }
+  );
 }
 
 export async function POST(request: Request) {
