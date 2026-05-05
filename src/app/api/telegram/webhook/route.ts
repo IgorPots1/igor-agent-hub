@@ -1,10 +1,8 @@
 import { handleTelegramCommand } from "@/features/telegram/command-handler";
+import { routeNaturalTelegramText } from "@/features/telegram/natural-router";
 import { parseTelegramUpdate } from "@/features/telegram/parser";
 import type { TelegramUpdate } from "@/features/telegram/types";
-import {
-  handleTelegramVoiceMessage,
-  normalizeVoiceTranscriptToCommand,
-} from "@/features/telegram/voice";
+import { handleTelegramVoiceMessage } from "@/features/telegram/voice";
 
 export const runtime = "nodejs";
 
@@ -45,11 +43,23 @@ export async function POST(request: Request) {
   }
 
   if (parsedMessage.text && !parsedMessage.text.startsWith("/")) {
-    const normalizedCommand = normalizeVoiceTranscriptToCommand(parsedMessage.text);
+    const naturalRoute = routeNaturalTelegramText(parsedMessage.text);
 
-    if (normalizedCommand) {
+    if (naturalRoute.kind === "command") {
       await handleTelegramCommand(parsedMessage, {
-        messageText: normalizedCommand,
+        messageText: naturalRoute.messageText,
+      });
+      return okResponse();
+    }
+
+    if (naturalRoute.kind === "save") {
+      await handleTelegramCommand(parsedMessage, {
+        fallbackSave: {
+          rawText: naturalRoute.rawText,
+          source: "telegram",
+          tags: [],
+          successMessage: "✅ Сохранил во второй мозг",
+        },
       });
       return okResponse();
     }

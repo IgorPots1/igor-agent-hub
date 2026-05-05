@@ -1,9 +1,12 @@
 import OpenAI, { toFile } from "openai";
 import path from "node:path";
 
-import { parseManualReminder } from "@/features/reminders/service";
 import type { ParsedTelegramUpdate } from "@/features/telegram/parser";
 import { handleTelegramCommand } from "@/features/telegram/command-handler";
+import {
+  normalizeWhitespace,
+  routeNaturalTelegramText,
+} from "@/features/telegram/natural-router";
 import {
   downloadTelegramFile,
   getTelegramFile,
@@ -18,6 +21,8 @@ const TRANSCRIPTION_FAILED_MESSAGE =
   "Не смог распознать голосовое. Попробуй ещё раз или напиши текстом.";
 const TRANSCRIPTION_UNAVAILABLE_MESSAGE =
   "Голосовые пока недоступны: не настроено распознавание.";
+const TRANSCRIPTION_EMPTY_MESSAGE =
+  "Не расслышал текст в голосовом. Попробуй ещё раз или напиши текстом.";
 const MAX_TRANSCRIPT_PREVIEW_LENGTH = 90;
 const TELEGRAM_VOICE_UPLOAD_FILE_NAME = "voice.ogg";
 const TELEGRAM_VOICE_UPLOAD_MIME_TYPE = "audio/ogg";
@@ -34,19 +39,6 @@ function getOpenAiApiKey(): string {
 
 function getTranscriptionModel(): string {
   return process.env.OPENAI_TRANSCRIPTION_MODEL?.trim() || DEFAULT_OPENAI_TRANSCRIPTION_MODEL;
-}
-
-function normalizeWhitespace(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function normalizeForMatching(value: string): string {
-  return normalizeWhitespace(
-    value
-      .toLocaleLowerCase("ru")
-      .replace(/ё/g, "е")
-      .replace(/[.,!?;:()[\]"]/g, " ")
-  );
 }
 
 function truncateText(text: string, maxLength: number): string {
@@ -91,57 +83,6 @@ function buildVoiceReplyPrefix(transcript: string): string {
   return `🎙️ Распознал: ${truncateText(transcript, MAX_TRANSCRIPT_PREVIEW_LENGTH)}`;
 }
 
-function extractCommandPayload(transcript: string, pattern: RegExp): string | null {
-  const payload = normalizeWhitespace(transcript.replace(pattern, ""));
-  return payload || null;
-}
-
-function normalizeSaveVoiceCommand(transcript: string): string | null {
-  const payload = extractCommandPayload(
-    transcript,
-    /^(?:сохрани|запиши|добавь)(?:\s+во\s+второй\s+мозг)?(?:\s+|$)/iu
-  );
-
-  if (!payload) {
-    return null;
-  }
-
-  return `/save ${payload}`;
-}
-
-function normalizeSearchVoiceCommand(transcript: string): string | null {
-  const payload = extractCommandPayload(transcript, /^(?:найди|поиск|поищи)(?:\s+|$)/iu);
-
-  if (!payload) {
-    return null;
-  }
-
-  return `/search ${payload}`;
-}
-
-function normalizeReminderVoiceCommand(transcript: string): string | null {
-  const explicitReminderPatterns = [
-    /^(?:пожалуйста\s+напомни)(?:\s+|$)/iu,
-    /^(?:напомни\s+пожалуйста)(?:\s+|$)/iu,
-    /^(?:напомнить)(?:\s+|$)/iu,
-    /^(?:напомни)(?:\s+|$)/iu,
-  ];
-
-  for (const pattern of explicitReminderPatterns) {
-    const payload = extractCommandPayload(transcript, pattern);
-
-    if (payload) {
-      return `/remind ${payload}`;
-    }
-  }
-
-  if (!parseManualReminder(transcript)) {
-    return null;
-  }
-
-  return `/remind ${normalizeWhitespace(transcript)}`;
-}
-
 function getTelegramVoiceUploadFileName(filePath: string | null | undefined): string {
   const extension = path.extname(filePath ?? "").toLowerCase();
 
@@ -160,101 +101,6 @@ function getTelegramVoiceUploadMimeType(mimeType: string | null | undefined): st
   }
 
   return normalizedMimeType;
-}
-
-export function normalizeVoiceTranscriptToCommand(transcript: string): string | null {
-  const normalizedTranscript = normalizeWhitespace(transcript);
-  const normalizedForMatching = normalizeForMatching(normalizedTranscript);
-
-  if (!normalizedTranscript) {
-    return null;
-  }
-
-  if (
-    /^(?:summary|итоги|сводка)(?:\s+за)?\s+сегодня$/iu.test(normalizedForMatching) ||
-    /^(?:summary|итоги|сводка)\s+today$/iu.test(normalizedForMatching)
-  ) {
-    return "/summary today";
-  }
-
-  if (
-    /^(?:summary|итоги|сводка)(?:\s+за)?\s+(?:эту\s+)?недел(?:ю|я)$/iu.test(
-      normalizedForMatching
-    ) ||
-    /^(?:summary|итоги|сводка)\s+week$/iu.test(normalizedForMatching)
-  ) {
-    return "/summary week";
-  }
-
-  if (
-    normalizedForMatching === "покажи напоминания" ||
-    normalizedForMatching === "какие есть напоминания" ||
-    normalizedForMatching.includes("покажи напоминани") ||
-    normalizedForMatching.includes("какие есть напоминани") ||
-    normalizedForMatching === "напоминания"
-  ) {
-    return "/reminders";
-  }
-
-  const reminderCommand = normalizeReminderVoiceCommand(normalizedTranscript);
-
-  if (reminderCommand) {
-    return reminderCommand;
-  }
-
-  if (
-    normalizedForMatching.includes("инбокс") ||
-    normalizedForMatching.includes("inbox") ||
-    normalizedForMatching.includes("неразобран")
-  ) {
-    return "/inbox";
-  }
-
-  if (
-    normalizedForMatching === "покажи последнюю запись" ||
-    normalizedForMatching === "последняя запись" ||
-    (normalizedForMatching.includes("последн") && normalizedForMatching.includes("запис")) ||
-    normalizedForMatching === "что я только что сохранил"
-  ) {
-    return "/last";
-  }
-
-  if (
-    normalizedForMatching === "покажи последние записи" ||
-    normalizedForMatching === "последние записи" ||
-    normalizedForMatching.includes("последние записи") ||
-    normalizedForMatching === "что я сохранял"
-  ) {
-    return "/list";
-  }
-
-  if (
-    normalizedForMatching === "помощь" ||
-    normalizedForMatching === "что ты умеешь" ||
-    normalizedForMatching === "покажи команды" ||
-    normalizedForMatching.includes("что ты умеешь") ||
-    normalizedForMatching.includes("покажи команды")
-  ) {
-    return "/help";
-  }
-
-  if (normalizedForMatching.includes("статистика")) {
-    return "/stats";
-  }
-
-  const searchCommand = normalizeSearchVoiceCommand(normalizedTranscript);
-
-  if (searchCommand) {
-    return searchCommand;
-  }
-
-  const saveCommand = normalizeSaveVoiceCommand(normalizedTranscript);
-
-  if (saveCommand) {
-    return saveCommand;
-  }
-
-  return null;
 }
 
 async function transcribeTelegramVoice(
@@ -351,16 +197,17 @@ export async function handleTelegramVoiceMessage(
       uploadMimeType
     );
 
-    if (!transcript) {
-      throw new Error("OpenAI transcription returned an empty transcript");
+    const naturalRoute = routeNaturalTelegramText(transcript);
+
+    if (naturalRoute.kind === "ignore") {
+      await sendTelegramMessage(parsedMessage.chatId, TRANSCRIPTION_EMPTY_MESSAGE);
+      return;
     }
 
-    const normalizedCommand = normalizeVoiceTranscriptToCommand(transcript);
-
-    if (!normalizedCommand) {
+    if (naturalRoute.kind === "save") {
       await handleTelegramCommand(parsedMessage, {
         fallbackSave: {
-          rawText: transcript,
+          rawText: naturalRoute.rawText,
           source: TELEGRAM_VOICE_SOURCE,
           tags: [TELEGRAM_VOICE_TAG],
           successMessage: "🎙️ Расшифровал и сохранил во второй мозг",
@@ -370,10 +217,10 @@ export async function handleTelegramVoiceMessage(
       return;
     }
 
-    const isVoiceSaveCommand = normalizedCommand.startsWith("/save");
+    const isVoiceSaveCommand = naturalRoute.messageText.startsWith("/save");
 
     await handleTelegramCommand(parsedMessage, {
-      messageText: normalizedCommand,
+      messageText: naturalRoute.messageText,
       brainItemSource: TELEGRAM_VOICE_SOURCE,
       brainItemTags: [TELEGRAM_VOICE_TAG],
       saveSuccessMessage: "🎙️ Расшифровал и сохранил во второй мозг",
