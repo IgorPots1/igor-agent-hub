@@ -452,10 +452,11 @@ export async function handleTelegramCommand(
       await sendTelegramMessage(
         parsedMessage.chatId,
         [
-          "Не понял время. Примеры:",
+          "Не понял дату или время. Примеры:",
           " /remind вечером проверить перенос тренировки",
           " /remind завтра 09:00 написать ученику",
           " /remind через 30 минут проверить deploy",
+          " /remind пятнадцатого июня в 11 купить подарок",
         ].join("\n")
       );
       return "handled";
