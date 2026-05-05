@@ -16,6 +16,7 @@ const BELGRADE_TIME_ZONE = "Europe/Belgrade";
 const EVENING_REVIEW_TAG = "вечерний-разбор";
 const MANUAL_REMINDER_TAG = "напоминание";
 const REMINDER_TEXT_LIMIT = 90;
+const REMINDER_CLAIM_LEASE_MS = 60_000;
 const DEFAULT_REMINDER_HOUR = 10;
 const DEFAULT_REMINDER_MINUTE = 0;
 const EVENING_REMINDER_HOUR = 19;
@@ -1066,7 +1067,13 @@ export async function deliverDueReminders(limit = 20): Promise<{
   failed: number;
   skipped: number;
 }> {
-  const dueReminders = await listDueBrainReminders(new Date().toISOString(), limit);
+  const now = new Date();
+  const dueReminders = await listDueBrainReminders(
+    now.toISOString(),
+    // Treat a recent updated_at as an active delivery lease to reduce duplicate sends.
+    new Date(now.getTime() - REMINDER_CLAIM_LEASE_MS).toISOString(),
+    limit
+  );
   let sent = 0;
   let failed = 0;
   let skipped = 0;

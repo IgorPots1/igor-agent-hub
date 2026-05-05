@@ -93,6 +93,7 @@ export async function createBrainReminders(
 
 export async function listDueBrainReminders(
   nowIso: string,
+  claimedBeforeIso: string,
   limit = 20
 ): Promise<BrainReminderWithItem[]> {
   const supabase = createSupabaseServerClient();
@@ -104,6 +105,7 @@ export async function listDueBrainReminders(
     )
     .eq("status", "pending")
     .lte("remind_at", nowIso)
+    .lte("updated_at", claimedBeforeIso)
     .order("remind_at", { ascending: true })
     .limit(safeLimit);
 
