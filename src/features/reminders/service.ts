@@ -48,6 +48,13 @@ type ParsedTimeToken = {
   matchedText: string;
 };
 
+type ParsedCalendarDateToken = {
+  day: number;
+  month: number;
+  year: number | null;
+  matchedText: string;
+};
+
 const RUSSIAN_NUMBER_WORDS: Record<string, number> = {
   один: 1,
   одну: 1,
@@ -112,6 +119,47 @@ const RUSSIAN_MONTHS: Record<string, number> = {
   декабря: 12,
   дек: 12,
 };
+
+const RUSSIAN_ORDINAL_DAYS: Record<string, number> = {
+  первого: 1,
+  второго: 2,
+  третьего: 3,
+  четвертого: 4,
+  четвёртого: 4,
+  пятого: 5,
+  шестого: 6,
+  седьмого: 7,
+  восьмого: 8,
+  девятого: 9,
+  десятого: 10,
+  одиннадцатого: 11,
+  двенадцатого: 12,
+  тринадцатого: 13,
+  четырнадцатого: 14,
+  пятнадцатого: 15,
+  шестнадцатого: 16,
+  семнадцатого: 17,
+  восемнадцатого: 18,
+  девятнадцатого: 19,
+  двадцатого: 20,
+  "двадцать первого": 21,
+  "двадцать второго": 22,
+  "двадцать третьего": 23,
+  "двадцать четвертого": 24,
+  "двадцать четвёртого": 24,
+  "двадцать пятого": 25,
+  "двадцать шестого": 26,
+  "двадцать седьмого": 27,
+  "двадцать восьмого": 28,
+  "двадцать девятого": 29,
+  тридцатого: 30,
+  "тридцать первого": 31,
+};
+
+const RUSSIAN_ORDINAL_DAY_PATTERN = Object.keys(RUSSIAN_ORDINAL_DAYS)
+  .sort((left, right) => right.length - left.length)
+  .map((phrase) => escapeRegExp(phrase))
+  .join("|");
 
 const RUSSIAN_WEEKDAYS: Record<string, number> = {
   понедельник: 1,
@@ -289,6 +337,10 @@ function normalizeRussianText(value: string): string {
   return value.toLocaleLowerCase("ru").replace(/ё/g, "е").trim();
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function parseRussianNumberToken(token: string | undefined): number | null {
   if (!token) {
     return null;
@@ -310,6 +362,56 @@ function resolveRussianMonth(token: string): number | null {
 
 function resolveRussianWeekday(token: string): number | null {
   return RUSSIAN_WEEKDAYS[normalizeRussianText(token)] ?? null;
+}
+
+function resolveRussianOrdinalDay(token: string): number | null {
+  return RUSSIAN_ORDINAL_DAYS[normalizeRussianText(token)] ?? null;
+}
+
+function parseLeadingRussianCalendarDate(value: string): ParsedCalendarDateToken | null {
+  const numericDateMatch = value.match(
+    /^[\s,.;:!-]*(\d{1,2})(?:\s*-?(?:го|ое|е))?\s+([а-яё]+)(?:\s+(\d{4})(?:\s*г(?:од(?:а)?)?)?)?(?:[\s,.;:!?-]+|$)/iu
+  );
+
+  if (numericDateMatch) {
+    const month = resolveRussianMonth(numericDateMatch[2]);
+
+    if (!month) {
+      return null;
+    }
+
+    return {
+      day: Number(numericDateMatch[1]),
+      month,
+      year: numericDateMatch[3] ? Number(numericDateMatch[3]) : null,
+      matchedText: numericDateMatch[0],
+    };
+  }
+
+  const ordinalDateMatch = value.match(
+    new RegExp(
+      String.raw`^[\s,.;:!-]*(${RUSSIAN_ORDINAL_DAY_PATTERN})\s+([а-яё]+)(?:\s+(\d{4})(?:\s*г(?:од(?:а)?)?)?)?(?:[\s,.;:!?-]+|$)`,
+      "iu"
+    )
+  );
+
+  if (!ordinalDateMatch) {
+    return null;
+  }
+
+  const day = resolveRussianOrdinalDay(ordinalDateMatch[1]);
+  const month = resolveRussianMonth(ordinalDateMatch[2]);
+
+  if (!day || !month) {
+    return null;
+  }
+
+  return {
+    day,
+    month,
+    year: ordinalDateMatch[3] ? Number(ordinalDateMatch[3]) : null,
+    matchedText: ordinalDateMatch[0],
+  };
 }
 
 function normalizeMeridiemHour(hour: number, meridiem: string | undefined): number {
@@ -405,7 +507,7 @@ function extractLeadingTime(
 function cleanupReminderRawText(value: string): string {
   return value
     .replace(/^[\s,.;:!?-]+/u, "")
-    .replace(/^что(?:\s+|$)/iu, "")
+    .replace(/^(?:что|чтобы)(?:\s+|$)/iu, "")
     .replace(/^[\s,.;:!?-]+/u, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -867,24 +969,30 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
     );
   }
 
-  const monthNameDateMatch = reminderText.match(/^(\d{1,2})\s+([а-яё]+)(?:\s+(\d{4}))?(?:\s+|$)/iu);
+  const monthNameDateMatch = parseLeadingRussianCalendarDate(reminderText);
 
   if (monthNameDateMatch) {
-    const month = resolveRussianMonth(monthNameDateMatch[2]);
-
-    if (!month) {
-      return null;
-    }
-
-    const day = Number(monthNameDateMatch[1]);
-    const explicitYear = monthNameDateMatch[3] ? Number(monthNameDateMatch[3]) : null;
+    const explicitYear = monthNameDateMatch.year;
 
     return buildDatedResult(
-      reminderText.slice(monthNameDateMatch[0].length),
+      reminderText.slice(monthNameDateMatch.matchedText.length),
       (hour, minute) =>
         explicitYear === null
-          ? resolveNearestFutureDateWithoutYear(month, day, hour, minute, now)
-          : createBelgradeIsoIfFuture(explicitYear, month, day, hour, minute, now)
+          ? resolveNearestFutureDateWithoutYear(
+              monthNameDateMatch.month,
+              monthNameDateMatch.day,
+              hour,
+              minute,
+              now
+            )
+          : createBelgradeIsoIfFuture(
+              explicitYear,
+              monthNameDateMatch.month,
+              monthNameDateMatch.day,
+              hour,
+              minute,
+              now
+            )
     );
   }
 
