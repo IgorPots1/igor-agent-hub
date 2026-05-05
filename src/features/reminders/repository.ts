@@ -12,6 +12,9 @@ type BrainReminderRow = {
   telegram_chat_id: string;
   remind_at: string;
   status: BrainReminderStatus;
+  attempt_count: number;
+  last_attempt_at: string | null;
+  next_attempt_at: string | null;
   sent_at: string | null;
   error: string | null;
   created_at: string;
@@ -32,6 +35,9 @@ function mapBrainReminderRow(row: BrainReminderRow): BrainReminder {
     telegramChatId: row.telegram_chat_id,
     remindAt: row.remind_at,
     status: row.status,
+    attemptCount: row.attempt_count,
+    lastAttemptAt: row.last_attempt_at,
+    nextAttemptAt: row.next_attempt_at,
     sentAt: row.sent_at,
     error: row.error,
     createdAt: row.created_at,
@@ -101,10 +107,11 @@ export async function listDueBrainReminders(
   const { data, error } = await supabase
     .from("brain_reminders")
     .select(
-      "id, brain_item_id, telegram_chat_id, remind_at, status, sent_at, error, created_at, updated_at, brain_item:brain_items!inner(raw_text, source, tags, type)"
+      "id, brain_item_id, telegram_chat_id, remind_at, status, attempt_count, last_attempt_at, next_attempt_at, sent_at, error, created_at, updated_at, brain_item:brain_items!inner(raw_text, source, tags, type)"
     )
     .eq("status", "pending")
     .lte("remind_at", nowIso)
+    .or(`next_attempt_at.is.null,next_attempt_at.lte.${nowIso}`)
     .lte("updated_at", claimedBeforeIso)
     .order("remind_at", { ascending: true })
     .limit(safeLimit);
@@ -126,7 +133,7 @@ export async function listUpcomingBrainRemindersForChat(
   const { data, error } = await supabase
     .from("brain_reminders")
     .select(
-      "id, brain_item_id, telegram_chat_id, remind_at, status, sent_at, error, created_at, updated_at, brain_item:brain_items!inner(raw_text, source, tags, type)"
+      "id, brain_item_id, telegram_chat_id, remind_at, status, attempt_count, last_attempt_at, next_attempt_at, sent_at, error, created_at, updated_at, brain_item:brain_items!inner(raw_text, source, tags, type)"
     )
     .eq("telegram_chat_id", telegramChatId)
     .eq("status", "pending")
@@ -143,15 +150,22 @@ export async function listUpcomingBrainRemindersForChat(
 
 export async function claimPendingBrainReminder(
   id: string,
-  expectedUpdatedAt: string
-): Promise<boolean> {
+  expectedUpdatedAt: string,
+  expectedAttemptCount: number
+): Promise<number | null> {
   const supabase = createSupabaseServerClient();
+  const claimedAt = new Date().toISOString();
   const { data, error } = await supabase
     .from("brain_reminders")
-    .update({ updated_at: new Date().toISOString() })
+    .update({
+      updated_at: claimedAt,
+      attempt_count: expectedAttemptCount + 1,
+      last_attempt_at: claimedAt,
+    })
     .eq("id", id)
     .eq("status", "pending")
     .eq("updated_at", expectedUpdatedAt)
+    .eq("attempt_count", expectedAttemptCount)
     .select("id")
     .maybeSingle();
 
@@ -159,7 +173,7 @@ export async function claimPendingBrainReminder(
     throw new Error(`Failed to claim brain reminder ${id}: ${error.message}`);
   }
 
-  return Boolean(data);
+  return data ? expectedAttemptCount + 1 : null;
 }
 
 export async function markBrainReminderSent(id: string, sentAt: string): Promise<void> {
@@ -169,6 +183,7 @@ export async function markBrainReminderSent(id: string, sentAt: string): Promise
     .update({
       status: "sent",
       sent_at: sentAt,
+      next_attempt_at: null,
       error: null,
     })
     .eq("id", id);
@@ -178,15 +193,42 @@ export async function markBrainReminderSent(id: string, sentAt: string): Promise
   }
 }
 
+function truncateReminderError(errorMessage: string): string {
+  return errorMessage.slice(0, 300);
+}
+
+export async function rescheduleBrainReminder(
+  id: string,
+  errorMessage: string,
+  nextAttemptAt: string
+): Promise<void> {
+  const supabase = createSupabaseServerClient();
+  const shortError = truncateReminderError(errorMessage);
+  const { error } = await supabase
+    .from("brain_reminders")
+    .update({
+      status: "pending",
+      error: shortError,
+      sent_at: null,
+      next_attempt_at: nextAttemptAt,
+    })
+    .eq("id", id);
+
+  if (error) {
+    throw new Error(`Failed to reschedule brain reminder ${id}: ${error.message}`);
+  }
+}
+
 export async function markBrainReminderFailed(id: string, errorMessage: string): Promise<void> {
   const supabase = createSupabaseServerClient();
-  const shortError = errorMessage.slice(0, 300);
+  const shortError = truncateReminderError(errorMessage);
   const { error } = await supabase
     .from("brain_reminders")
     .update({
       status: "failed",
       error: shortError,
       sent_at: null,
+      next_attempt_at: null,
     })
     .eq("id", id);
 

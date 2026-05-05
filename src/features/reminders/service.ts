@@ -2,6 +2,7 @@ import {
   claimPendingBrainReminder,
   createBrainReminders,
   listDueBrainReminders,
+  rescheduleBrainReminder,
   listUpcomingBrainRemindersForChat,
   markBrainReminderFailed,
   markBrainReminderSent,
@@ -17,6 +18,8 @@ const EVENING_REVIEW_TAG = "вечерний-разбор";
 const MANUAL_REMINDER_TAG = "напоминание";
 const REMINDER_TEXT_LIMIT = 90;
 const REMINDER_CLAIM_LEASE_MS = 60_000;
+const REMINDER_RETRY_DELAY_MS = 5 * 60_000;
+const MAX_REMINDER_DELIVERY_ATTEMPTS = 3;
 const DEFAULT_REMINDER_HOUR = 10;
 const DEFAULT_REMINDER_MINUTE = 0;
 const EVENING_REMINDER_HOUR = 19;
@@ -1079,9 +1082,13 @@ export async function deliverDueReminders(limit = 20): Promise<{
   let skipped = 0;
 
   for (const reminder of dueReminders) {
-    const claimed = await claimPendingBrainReminder(reminder.id, reminder.updatedAt);
+    const attemptCount = await claimPendingBrainReminder(
+      reminder.id,
+      reminder.updatedAt,
+      reminder.attemptCount
+    );
 
-    if (!claimed) {
+    if (attemptCount === null) {
       skipped += 1;
       continue;
     }
@@ -1099,7 +1106,17 @@ export async function deliverDueReminders(limit = 20): Promise<{
       sent += 1;
     } catch (error) {
       failed += 1;
-      await markBrainReminderFailed(reminder.id, getErrorMessage(error));
+      const errorMessage = getErrorMessage(error);
+
+      if (attemptCount < MAX_REMINDER_DELIVERY_ATTEMPTS) {
+        await rescheduleBrainReminder(
+          reminder.id,
+          errorMessage,
+          new Date(Date.now() + REMINDER_RETRY_DELAY_MS).toISOString()
+        );
+      } else {
+        await markBrainReminderFailed(reminder.id, errorMessage);
+      }
     }
   }
 

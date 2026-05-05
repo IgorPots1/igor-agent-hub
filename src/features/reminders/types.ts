@@ -8,6 +8,9 @@ export type BrainReminder = {
   telegramChatId: string;
   remindAt: string;
   status: BrainReminderStatus;
+  attemptCount: number;
+  lastAttemptAt: string | null;
+  nextAttemptAt: string | null;
   sentAt: string | null;
   error: string | null;
   createdAt: string;
