@@ -42,3 +42,29 @@ Example request:
 curl -X POST "https://your-domain.example/api/cron/reminders" \
   -H "Authorization: Bearer <CRON_SECRET>"
 ```
+
+## Obsidian Export
+
+Obsidian is an export target in this project, not the source of truth. Active notes are exported from Supabase `brain_items` as Markdown files with YAML frontmatter and grouped into category folders inside a zip archive.
+
+Configure a separate export secret in your local or deployment environment:
+
+```text
+EXPORT_SECRET=<your_export_secret>
+```
+
+Do not commit real secrets to the repo. `.env.example` only contains placeholders.
+
+Example export request:
+
+```bash
+curl "https://your-domain.example/api/export/obsidian" \
+  -H "Authorization: Bearer <EXPORT_SECRET>" \
+  --output obsidian-export.zip
+```
+
+To import into Obsidian:
+
+1. Unzip `obsidian-export.zip`.
+2. Copy the extracted category folders into your Obsidian vault, or unzip directly into a dedicated vault folder.
+3. Open the vault in Obsidian and let it index the new Markdown files.

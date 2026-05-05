@@ -2,6 +2,7 @@ import { classifyBrainItem } from "@/features/brain/ai-classifier";
 import {
   createBrainItem,
   getLatestBrainItem as getLatestBrainItemFromRepository,
+  listAllActiveBrainItems,
   listActiveBrainItemsForStats,
   listActiveBrainItemsSince,
   listInboxBrainItems,
@@ -241,6 +242,10 @@ export async function getRecentBrainItems(
 
 export async function getBrainItemsForStats(limit = 500): Promise<BrainItem[]> {
   return listActiveBrainItemsForStats(limit);
+}
+
+export async function getAllActiveBrainItems(): Promise<BrainItem[]> {
+  return listAllActiveBrainItems();
 }
 
 export async function searchBrainItems(query: string, limit = 10): Promise<BrainItem[]> {

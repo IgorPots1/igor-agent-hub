@@ -152,6 +152,37 @@ export async function listActiveBrainItemsForStats(limit = 500): Promise<BrainIt
   return (data as BrainItemRow[]).map(mapBrainItemRow);
 }
 
+export async function listAllActiveBrainItems(): Promise<BrainItem[]> {
+  const supabase = createSupabaseServerClient();
+  const pageSize = 1000;
+  const items: BrainItem[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("brain_items")
+      .select("*")
+      .eq("status", DEFAULT_BRAIN_ITEM_STATUS)
+      .order("created_at", { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      throw new Error(`Failed to list active brain items for export: ${error.message}`);
+    }
+
+    const rows = (data as BrainItemRow[]) ?? [];
+    items.push(...rows.map(mapBrainItemRow));
+
+    if (rows.length < pageSize) {
+      break;
+    }
+
+    from += pageSize;
+  }
+
+  return items;
+}
+
 export async function getLatestBrainItem(): Promise<BrainItem | null> {
   const supabase = createSupabaseServerClient();
 
