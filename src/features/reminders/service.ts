@@ -16,6 +16,10 @@ const BELGRADE_TIME_ZONE = "Europe/Belgrade";
 const EVENING_REVIEW_TAG = "вечерний-разбор";
 const MANUAL_REMINDER_TAG = "напоминание";
 const REMINDER_TEXT_LIMIT = 90;
+const DEFAULT_REMINDER_HOUR = 10;
+const DEFAULT_REMINDER_MINUTE = 0;
+const EVENING_REMINDER_HOUR = 19;
+const EVENING_REMINDER_MINUTE = 0;
 
 type ZonedDateParts = {
   year: number;
@@ -30,6 +34,99 @@ export type ParsedManualReminder = {
   rawText: string;
   remindAt: string;
   formattedLocalDateTime: string;
+};
+
+type LocalDateParts = {
+  year: number;
+  month: number;
+  day: number;
+};
+
+type ParsedTimeToken = {
+  hour: number;
+  minute: number;
+  matchedText: string;
+};
+
+const RUSSIAN_NUMBER_WORDS: Record<string, number> = {
+  один: 1,
+  одну: 1,
+  два: 2,
+  две: 2,
+  три: 3,
+  четыре: 4,
+  пять: 5,
+  шесть: 6,
+  семь: 7,
+  восемь: 8,
+  девять: 9,
+  десять: 10,
+  одиннадцать: 11,
+  двенадцать: 12,
+  тринадцать: 13,
+  четырнадцать: 14,
+  пятнадцать: 15,
+  шестнадцать: 16,
+  семнадцать: 17,
+  восемнадцать: 18,
+  девятнадцать: 19,
+  двадцать: 20,
+  тридцать: 30,
+};
+
+const RUSSIAN_MONTHS: Record<string, number> = {
+  январь: 1,
+  января: 1,
+  янв: 1,
+  февраль: 2,
+  февраля: 2,
+  фев: 2,
+  март: 3,
+  марта: 3,
+  мар: 3,
+  апрель: 4,
+  апреля: 4,
+  апр: 4,
+  май: 5,
+  мая: 5,
+  июнь: 6,
+  июня: 6,
+  июн: 6,
+  июль: 7,
+  июля: 7,
+  июл: 7,
+  август: 8,
+  августа: 8,
+  авг: 8,
+  сентябрь: 9,
+  сентября: 9,
+  сент: 9,
+  сен: 9,
+  октябрь: 10,
+  октября: 10,
+  окт: 10,
+  ноябрь: 11,
+  ноября: 11,
+  ноя: 11,
+  декабрь: 12,
+  декабря: 12,
+  дек: 12,
+};
+
+const RUSSIAN_WEEKDAYS: Record<string, number> = {
+  понедельник: 1,
+  понедельника: 1,
+  вторник: 2,
+  вторника: 2,
+  среда: 3,
+  среду: 3,
+  четверг: 4,
+  четверга: 4,
+  пятница: 5,
+  пятницу: 5,
+  суббота: 6,
+  субботу: 6,
+  воскресенье: 0,
 };
 
 const zonedDateFormatter = new Intl.DateTimeFormat("en-GB", {
@@ -168,6 +265,201 @@ function addLocalDays(year: number, month: number, day: number, daysToAdd: numbe
     month: nextDate.getUTCMonth() + 1,
     day: nextDate.getUTCDate(),
   };
+}
+
+function getDaysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function addLocalMonths(year: number, month: number, day: number, monthsToAdd: number): LocalDateParts {
+  const baseMonthIndex = month - 1 + monthsToAdd;
+  const targetYear = year + Math.floor(baseMonthIndex / 12);
+  const normalizedMonthIndex = ((baseMonthIndex % 12) + 12) % 12;
+  const targetMonth = normalizedMonthIndex + 1;
+  const targetDay = Math.min(day, getDaysInMonth(targetYear, targetMonth));
+
+  return {
+    year: targetYear,
+    month: targetMonth,
+    day: targetDay,
+  };
+}
+
+function normalizeRussianText(value: string): string {
+  return value.toLocaleLowerCase("ru").replace(/ё/g, "е").trim();
+}
+
+function parseRussianNumberToken(token: string | undefined): number | null {
+  if (!token) {
+    return null;
+  }
+
+  const normalizedToken = normalizeRussianText(token);
+
+  if (/^\d+$/u.test(normalizedToken)) {
+    const numericValue = Number(normalizedToken);
+    return Number.isInteger(numericValue) ? numericValue : null;
+  }
+
+  return RUSSIAN_NUMBER_WORDS[normalizedToken] ?? null;
+}
+
+function resolveRussianMonth(token: string): number | null {
+  return RUSSIAN_MONTHS[normalizeRussianText(token)] ?? null;
+}
+
+function resolveRussianWeekday(token: string): number | null {
+  return RUSSIAN_WEEKDAYS[normalizeRussianText(token)] ?? null;
+}
+
+function normalizeMeridiemHour(hour: number, meridiem: string | undefined): number {
+  if (!meridiem) {
+    return hour;
+  }
+
+  const normalizedMeridiem = normalizeRussianText(meridiem);
+
+  if (normalizedMeridiem === "утра") {
+    return hour === 12 ? 0 : hour;
+  }
+
+  if (normalizedMeridiem === "вечера" && hour < 12) {
+    return hour + 12;
+  }
+
+  return hour;
+}
+
+function extractLeadingTime(
+  value: string,
+  options: { allowSeparatedHourMinute?: boolean } = {}
+): ParsedTimeToken | null {
+  const { allowSeparatedHourMinute = false } = options;
+
+  const eveningMatch = value.match(/^[\s,.;:!-]*вечером(?:[\s,.;:!?-]+|$)/iu);
+
+  if (eveningMatch) {
+    return {
+      hour: EVENING_REMINDER_HOUR,
+      minute: EVENING_REMINDER_MINUTE,
+      matchedText: eveningMatch[0],
+    };
+  }
+
+  const timeWithSeparatorMatch = value.match(
+    /^[\s,.;:!-]*(?:в\s+)?(\d{1,2})[:.](\d{2})(?:\s+(утра|вечера))?(?:[\s,.;:!?-]+|$)/iu
+  );
+
+  if (timeWithSeparatorMatch) {
+    return {
+      hour: normalizeMeridiemHour(
+        Number(timeWithSeparatorMatch[1]),
+        timeWithSeparatorMatch[3]
+      ),
+      minute: Number(timeWithSeparatorMatch[2]),
+      matchedText: timeWithSeparatorMatch[0],
+    };
+  }
+
+  if (allowSeparatedHourMinute) {
+    const separatedTimeMatch = value.match(
+      /^[\s,.;:!-]*(?:в\s+)?(\d{1,2})\s+(\d{2})(?:\s+(утра|вечера))?(?:[\s,.;:!?-]+|$)/iu
+    );
+
+    if (separatedTimeMatch) {
+      return {
+        hour: normalizeMeridiemHour(Number(separatedTimeMatch[1]), separatedTimeMatch[3]),
+        minute: Number(separatedTimeMatch[2]),
+        matchedText: separatedTimeMatch[0],
+      };
+    }
+  }
+
+  const hoursWordMatch = value.match(
+    /^[\s,.;:!-]*(?:в\s+)?(\d{1,2})\s*час(?:ов|а)?(?:\s+(утра|вечера))?(?:[\s,.;:!?-]+|$)/iu
+  );
+
+  if (hoursWordMatch) {
+    return {
+      hour: normalizeMeridiemHour(Number(hoursWordMatch[1]), hoursWordMatch[2]),
+      minute: 0,
+      matchedText: hoursWordMatch[0],
+    };
+  }
+
+  const bareHourMatch = value.match(
+    /^[\s,.;:!-]*(?:в\s+)?(\d{1,2})(?:\s+(утра|вечера))?(?:[\s,.;:!?-]+|$)/iu
+  );
+
+  if (bareHourMatch) {
+    return {
+      hour: normalizeMeridiemHour(Number(bareHourMatch[1]), bareHourMatch[2]),
+      minute: 0,
+      matchedText: bareHourMatch[0],
+    };
+  }
+
+  return null;
+}
+
+function cleanupReminderRawText(value: string): string {
+  return value
+    .replace(/^[\s,.;:!?-]+/u, "")
+    .replace(/^что(?:\s+|$)/iu, "")
+    .replace(/^[\s,.;:!?-]+/u, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveNearestFutureDateWithoutYear(
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  now = new Date()
+): string | null {
+  const localNow = getZonedDateParts(now);
+
+  return (
+    createBelgradeIsoIfFuture(localNow.year, month, day, hour, minute, now) ??
+    createBelgradeIsoIfFuture(localNow.year + 1, month, day, hour, minute, now)
+  );
+}
+
+function resolveNearestFutureWeekday(
+  weekday: number,
+  hour: number,
+  minute: number,
+  now = new Date()
+): string | null {
+  const localNow = getZonedDateParts(now);
+  const currentWeekday = new Date(
+    Date.UTC(localNow.year, localNow.month - 1, localNow.day)
+  ).getUTCDay();
+  const daysUntilWeekday = (weekday - currentWeekday + 7) % 7;
+  const candidateDate = addLocalDays(localNow.year, localNow.month, localNow.day, daysUntilWeekday);
+  const remindAt = createBelgradeIsoIfFuture(
+    candidateDate.year,
+    candidateDate.month,
+    candidateDate.day,
+    hour,
+    minute,
+    now
+  );
+
+  if (remindAt) {
+    return remindAt;
+  }
+
+  const nextWeekDate = addLocalDays(candidateDate.year, candidateDate.month, candidateDate.day, 7);
+  return createBelgradeIsoIfFuture(
+    nextWeekDate.year,
+    nextWeekDate.month,
+    nextWeekDate.day,
+    hour,
+    minute,
+    now
+  );
 }
 
 function truncateReminderText(text: string, maxLength: number): string {
@@ -345,7 +637,7 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
   }
 
   const reminderText = normalizedText
-    .replace(/^(?:напомнить|напомни)(?:\s+|$)/i, "")
+    .replace(/^(?:напомнить|напомни|напомню)(?:\s+мне)?(?:\s*[,.:;-]\s*|\s+|$)/iu, "")
     .trim();
 
   if (!reminderText) {
@@ -370,7 +662,7 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
       return null;
     }
 
-    const normalizedRawText = rawText.replace(/\s+/g, " ").trim();
+    const normalizedRawText = cleanupReminderRawText(rawText);
 
     if (!normalizedRawText) {
       return null;
@@ -386,80 +678,98 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
   const buildResult = (matchedPrefix: string, remindAt: string | null): ParsedManualReminder | null =>
     buildResultFromRawText(reminderText.slice(matchedPrefix.length), remindAt);
 
-  const todayEveningMatch = reminderText.match(/^сегодня\s+вечером(?:\s+|$)/i);
+  const buildDatedResult = (
+    remainingText: string,
+    resolveRemindAt: (hour: number, minute: number) => string | null,
+    options: { defaultHour?: number; defaultMinute?: number } = {}
+  ): ParsedManualReminder | null => {
+    const {
+      defaultHour = DEFAULT_REMINDER_HOUR,
+      defaultMinute = DEFAULT_REMINDER_MINUTE,
+    } = options;
 
-  if (todayEveningMatch) {
-    return buildResult(
-      todayEveningMatch[0],
-      createBelgradeIsoIfFuture(today.year, today.month, today.day, 19, 0, now)
-    );
-  }
+    const parsedTime = extractLeadingTime(remainingText, {
+      allowSeparatedHourMinute: true,
+    });
 
-  const tomorrowEveningMatch = reminderText.match(/^завтра\s+вечером(?:\s+|$)/i);
+    if (parsedTime) {
+      return buildResultFromRawText(
+        remainingText.slice(parsedTime.matchedText.length),
+        resolveRemindAt(parsedTime.hour, parsedTime.minute)
+      );
+    }
 
-  if (tomorrowEveningMatch) {
-    return buildResult(
-      tomorrowEveningMatch[0],
-      createBelgradeIsoIfFuture(tomorrow.year, tomorrow.month, tomorrow.day, 19, 0, now)
-    );
-  }
+    return buildResultFromRawText(remainingText, resolveRemindAt(defaultHour, defaultMinute));
+  };
 
-  const eveningMatch = reminderText.match(/^вечером(?:\s+|$)/i);
+  const eveningMatch = reminderText.match(/^вечером(?:\s+|$)/iu);
 
   if (eveningMatch) {
     const targetDay = currentMinutes < 19 * 60 ? today : tomorrow;
 
     return buildResult(
       eveningMatch[0],
-      createBelgradeIsoIfFuture(targetDay.year, targetDay.month, targetDay.day, 19, 0, now)
-    );
-  }
-
-  const relativeMatch = reminderText.match(
-    /^через\s+(\d+)\s+(минут(?:у|ы)?|минут|час(?:а|ов)?|час|день|дня|дней)(?:\s+|$)/i
-  );
-
-  if (relativeMatch) {
-    const amount = Number(relativeMatch[1]);
-    const unitToken = relativeMatch[2].toLocaleLowerCase("ru");
-    const unit =
-      unitToken.startsWith("минут")
-        ? "minute"
-        : unitToken.startsWith("час")
-          ? "hour"
-          : "day";
-
-    return buildResult(relativeMatch[0], getManualReminderRelativeIso(amount, unit, now));
-  }
-
-  const namedDayTimeMatch = reminderText.match(
-    /^(сегодня|завтра|послезавтра)\s+(?:в\s+)?(\d{1,2}):(\d{2})(?:\s+|$)/i
-  );
-
-  if (namedDayTimeMatch) {
-    const dayToken = namedDayTimeMatch[1].toLocaleLowerCase("ru");
-    const targetDay =
-      dayToken === "сегодня" ? today : dayToken === "завтра" ? tomorrow : dayAfterTomorrow;
-
-    return buildResult(
-      namedDayTimeMatch[0],
       createBelgradeIsoIfFuture(
         targetDay.year,
         targetDay.month,
         targetDay.day,
-        Number(namedDayTimeMatch[2]),
-        Number(namedDayTimeMatch[3]),
+        EVENING_REMINDER_HOUR,
+        EVENING_REMINDER_MINUTE,
         now
       )
     );
   }
 
+  const relativeMinuteHourMatch = reminderText.match(
+    /^через\s+(\d+|[а-яё]+)\s+(минут(?:у|ы)?|минут|час(?:а|ов)?|час)(?:\s+|$)/iu
+  );
+
+  if (relativeMinuteHourMatch) {
+    const amount = parseRussianNumberToken(relativeMinuteHourMatch[1]);
+    const unitToken = normalizeRussianText(relativeMinuteHourMatch[2]);
+
+    if (!amount) {
+      return null;
+    }
+
+    const unit = unitToken.startsWith("минут") ? "minute" : "hour";
+    return buildResult(relativeMinuteHourMatch[0], getManualReminderRelativeIso(amount, unit, now));
+  }
+
+  const relativeDateMatch = reminderText.match(
+    /^через\s+(?:(\d+|[а-яё]+)\s+)?(день|дня|дней|неделю|недели|недель|месяц|месяца|месяцев)(?:\s+|$)/iu
+  );
+
+  if (relativeDateMatch) {
+    const amount = relativeDateMatch[1] ? parseRussianNumberToken(relativeDateMatch[1]) : 1;
+    const unitToken = normalizeRussianText(relativeDateMatch[2]);
+
+    if (!amount || amount <= 0) {
+      return null;
+    }
+
+    const targetDate = unitToken.startsWith("меся")
+      ? addLocalMonths(today.year, today.month, today.day, amount)
+      : addLocalDays(
+          today.year,
+          today.month,
+          today.day,
+          unitToken.startsWith("недел") ? amount * 7 : amount
+        );
+
+    return buildDatedResult(
+      reminderText.slice(relativeDateMatch[0].length),
+      (hour, minute) =>
+        createBelgradeIsoIfFuture(targetDate.year, targetDate.month, targetDate.day, hour, minute, now)
+    );
+  }
+
   const namedDayTrailingTimeMatch = reminderText.match(
-    /^(сегодня|завтра|послезавтра)\s+(.+?)\s+(?:в\s+)?(\d{1,2}):(\d{2})$/i
+    /^(сегодня|завтра|послезавтра)\s+(.+?)\s+(?:в\s+)?(\d{1,2})[:.](\d{2})$/iu
   );
 
   if (namedDayTrailingTimeMatch) {
-    const dayToken = namedDayTrailingTimeMatch[1].toLocaleLowerCase("ru");
+    const dayToken = normalizeRussianText(namedDayTrailingTimeMatch[1]);
     const targetDay =
       dayToken === "сегодня" ? today : dayToken === "завтра" ? tomorrow : dayAfterTomorrow;
 
@@ -476,52 +786,133 @@ export function parseManualReminder(text: string, now = new Date()): ParsedManua
     );
   }
 
-  const isoDateTimeMatch = reminderText.match(
-    /^(\d{4})-(\d{2})-(\d{2})\s+(\d{1,2}):(\d{2})(?:\s+|$)/
-  );
+  const namedDayMatch = reminderText.match(/^(сегодня|завтра|послезавтра)(?:\s+|$)/iu);
 
-  if (isoDateTimeMatch) {
-    return buildResult(
-      isoDateTimeMatch[0],
-      createBelgradeIsoIfFuture(
-        Number(isoDateTimeMatch[1]),
-        Number(isoDateTimeMatch[2]),
-        Number(isoDateTimeMatch[3]),
-        Number(isoDateTimeMatch[4]),
-        Number(isoDateTimeMatch[5]),
-        now
-      )
+  if (namedDayMatch) {
+    const dayToken = normalizeRussianText(namedDayMatch[1]);
+    const targetDay =
+      dayToken === "сегодня" ? today : dayToken === "завтра" ? tomorrow : dayAfterTomorrow;
+
+    return buildDatedResult(
+      reminderText.slice(namedDayMatch[0].length),
+      (hour, minute) =>
+        createBelgradeIsoIfFuture(targetDay.year, targetDay.month, targetDay.day, hour, minute, now)
     );
   }
 
-  const dottedDateTimeMatch = reminderText.match(
-    /^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{1,2}):(\d{2})(?:\s+|$)/
+  const weekdayMatch = reminderText.match(
+    /^(?:в\s+)?(понедельник(?:а)?|вторник(?:а)?|среда|среду|четверг(?:а)?|пятница|пятницу|суббота|субботу|воскресенье)(?:\s+|$)/iu
   );
 
-  if (dottedDateTimeMatch) {
-    return buildResult(
-      dottedDateTimeMatch[0],
-      createBelgradeIsoIfFuture(
-        Number(dottedDateTimeMatch[3]),
-        Number(dottedDateTimeMatch[2]),
-        Number(dottedDateTimeMatch[1]),
-        Number(dottedDateTimeMatch[4]),
-        Number(dottedDateTimeMatch[5]),
-        now
-      )
+  if (weekdayMatch) {
+    const weekday = resolveRussianWeekday(weekdayMatch[1]);
+
+    if (weekday === null) {
+      return null;
+    }
+
+    return buildDatedResult(
+      reminderText.slice(weekdayMatch[0].length),
+      (hour, minute) => resolveNearestFutureWeekday(weekday, hour, minute, now)
     );
   }
 
-  const implicitTimeMatch = reminderText.match(/^в\s+(\d{1,2}):(\d{2})(?:\s+|$)/i);
+  const isoDateMatch = reminderText.match(/^(\d{4})-(\d{2})-(\d{2})(?:\s+|$)/u);
+
+  if (isoDateMatch) {
+    return buildDatedResult(
+      reminderText.slice(isoDateMatch[0].length),
+      (hour, minute) =>
+        createBelgradeIsoIfFuture(
+          Number(isoDateMatch[1]),
+          Number(isoDateMatch[2]),
+          Number(isoDateMatch[3]),
+          hour,
+          minute,
+          now
+        )
+    );
+  }
+
+  const dottedDateWithYearMatch = reminderText.match(/^(\d{2})\.(\d{2})\.(\d{4})(?:\s+|$)/u);
+
+  if (dottedDateWithYearMatch) {
+    return buildDatedResult(
+      reminderText.slice(dottedDateWithYearMatch[0].length),
+      (hour, minute) =>
+        createBelgradeIsoIfFuture(
+          Number(dottedDateWithYearMatch[3]),
+          Number(dottedDateWithYearMatch[2]),
+          Number(dottedDateWithYearMatch[1]),
+          hour,
+          minute,
+          now
+        )
+    );
+  }
+
+  const dottedDateWithoutYearMatch = reminderText.match(/^(\d{2})\.(\d{2})(?:\s+|$)/u);
+
+  if (dottedDateWithoutYearMatch) {
+    return buildDatedResult(
+      reminderText.slice(dottedDateWithoutYearMatch[0].length),
+      (hour, minute) =>
+        resolveNearestFutureDateWithoutYear(
+          Number(dottedDateWithoutYearMatch[2]),
+          Number(dottedDateWithoutYearMatch[1]),
+          hour,
+          minute,
+          now
+        )
+    );
+  }
+
+  const monthNameDateMatch = reminderText.match(/^(\d{1,2})\s+([а-яё]+)(?:\s+(\d{4}))?(?:\s+|$)/iu);
+
+  if (monthNameDateMatch) {
+    const month = resolveRussianMonth(monthNameDateMatch[2]);
+
+    if (!month) {
+      return null;
+    }
+
+    const day = Number(monthNameDateMatch[1]);
+    const explicitYear = monthNameDateMatch[3] ? Number(monthNameDateMatch[3]) : null;
+
+    return buildDatedResult(
+      reminderText.slice(monthNameDateMatch[0].length),
+      (hour, minute) =>
+        explicitYear === null
+          ? resolveNearestFutureDateWithoutYear(month, day, hour, minute, now)
+          : createBelgradeIsoIfFuture(explicitYear, month, day, hour, minute, now)
+    );
+  }
+
+  const implicitTimeMatch = extractLeadingTime(reminderText);
 
   if (implicitTimeMatch) {
-    const hour = Number(implicitTimeMatch[1]);
-    const minute = Number(implicitTimeMatch[2]);
     const remindAt =
-      createBelgradeIsoIfFuture(today.year, today.month, today.day, hour, minute, now) ??
-      createBelgradeIsoIfFuture(tomorrow.year, tomorrow.month, tomorrow.day, hour, minute, now);
+      createBelgradeIsoIfFuture(
+        today.year,
+        today.month,
+        today.day,
+        implicitTimeMatch.hour,
+        implicitTimeMatch.minute,
+        now
+      ) ??
+      createBelgradeIsoIfFuture(
+        tomorrow.year,
+        tomorrow.month,
+        tomorrow.day,
+        implicitTimeMatch.hour,
+        implicitTimeMatch.minute,
+        now
+      );
 
-    return buildResult(implicitTimeMatch[0], remindAt);
+    return buildResultFromRawText(
+      reminderText.slice(implicitTimeMatch.matchedText.length),
+      remindAt
+    );
   }
 
   return null;
