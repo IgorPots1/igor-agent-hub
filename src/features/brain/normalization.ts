@@ -1,8 +1,16 @@
 import type { BrainItem } from "@/features/brain/types";
 
-const TITLE_MAX_WORDS = 10;
-const TITLE_MAX_CHARACTERS = 70;
+const TITLE_MAX_WORDS = 14;
+const TITLE_MAX_CHARACTERS = 80;
 const TAG_LIMIT = 10;
+const TITLE_SECTION_MARKERS = [
+  "Цель проекта",
+  "Кратко",
+  "Архитектура",
+  "Текущий статус",
+  "Что сделали",
+  "Следующие шаги",
+] as const;
 
 export type NormalizedExportFrontmatter = {
   type: string;
@@ -51,6 +59,11 @@ function trimTrailingTitlePunctuation(value: string): string {
   return value.replace(/[.:;!?…\-\s]+$/u, "").trim();
 }
 
+function getFallbackExportTitle(item: Pick<BrainItem, "createdAt">): string {
+  const date = item.createdAt.slice(0, 10) || "без даты";
+  return `Заметка от ${date}`;
+}
+
 function cleanupLeadText(value: string): string {
   return normalizeWhitespace(
     value
@@ -59,6 +72,38 @@ function cleanupLeadText(value: string): string {
       .replace(/^\d+[.)]\s+/u, "")
       .replace(/^[:;,.!?-]+\s*/u, "")
   );
+}
+
+function findFirstTitleBoundary(value: string): number {
+  const newlineIndex = value.indexOf("\n");
+  let boundaryIndex = newlineIndex >= 0 ? newlineIndex : value.length;
+
+  const numberedListMatch = /\s+\d+[.)]\s+/u.exec(value);
+
+  if (numberedListMatch && typeof numberedListMatch.index === "number") {
+    boundaryIndex = Math.min(boundaryIndex, numberedListMatch.index);
+  }
+
+  for (const marker of TITLE_SECTION_MARKERS) {
+    const match = new RegExp(`(?:^|\\s)${marker}\\s*:`, "iu").exec(value);
+
+    if (match && typeof match.index === "number") {
+      boundaryIndex = Math.min(boundaryIndex, match.index);
+    }
+  }
+
+  return boundaryIndex;
+}
+
+function extractCompactTitleLead(value: string): string | null {
+  const normalizedValue = (value ?? "").replace(/\r\n?/g, "\n").trim();
+
+  if (!normalizedValue) {
+    return null;
+  }
+
+  const candidate = cleanupLeadText(normalizedValue.slice(0, findFirstTitleBoundary(normalizedValue)));
+  return candidate.length >= 4 ? candidate : null;
 }
 
 function extractMeaningfulLead(value: string): string | null {
@@ -99,10 +144,11 @@ export function normalizeMultilineText(value: string | null | undefined): string
 
 export function normalizeExportTitle(item: BrainItem): string {
   const candidates = [
+    extractCompactTitleLead(item.rawText),
+    extractCompactTitleLead(item.cleanedText ?? ""),
     extractMeaningfulLead(item.cleanedText ?? ""),
     extractMeaningfulLead(item.rawText),
     normalizeExportSummary(item),
-    item.id,
   ];
 
   for (const candidate of candidates) {
@@ -113,7 +159,7 @@ export function normalizeExportTitle(item: BrainItem): string {
     }
   }
 
-  return item.id;
+  return getFallbackExportTitle(item);
 }
 
 export function normalizeExportBody(item: BrainItem): string | null {

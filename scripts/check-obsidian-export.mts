@@ -65,7 +65,8 @@ const markdown = toMarkdownDocument(sampleItem);
 
 assert.ok(markdown.includes("# Нужно полировать экспорт заметок в Obsidian для Agent Hub"));
 assert.ok(markdown.includes("## Кратко"));
-assert.ok(markdown.includes("Polish Obsidian export formatting"));
+assert.ok(markdown.includes("Нужно полировать экспорт заметок в Obsidian для Agent Hub."));
+assert.ok(!markdown.includes("Polish Obsidian export formatting"));
 assert.ok(markdown.includes("## Суть"));
 assert.ok(markdown.includes("Сохранить zip-экспорт без изменений"));
 assert.ok(markdown.includes("## Исходная запись"));
@@ -73,7 +74,9 @@ assert.ok(markdown.indexOf("## Исходная запись") < markdown.indexO
 assert.ok(markdown.includes(sampleItem.rawText));
 assert.ok(!markdown.includes("## Context"));
 assert.ok(!markdown.includes("## Контекст"));
-assert.ok(!markdown.includes("<details>"));
+assert.ok(markdown.includes("<details>"));
+assert.ok(markdown.includes("<summary>Показать исходную запись</summary>"));
+assert.ok(markdown.includes("```text"));
 
 const taskItem: BrainItem = {
   ...sampleItem,
@@ -90,6 +93,32 @@ const taskMarkdown = toMarkdownDocument(taskItem);
 assert.ok(taskMarkdown.includes("## Действия"));
 assert.ok(taskMarkdown.includes("## Исходная запись"));
 assert.ok(taskMarkdown.includes(taskItem.rawText));
+
+const projectItem: BrainItem = {
+  ...sampleItem,
+  id: "project-1111-2222-3333-444455556666",
+  rawText:
+    "TrainingPeaks Reports Bot — статус на 2026-05-07 Цель проекта: собрать стабильный Telegram-бот для отчётов TrainingPeaks. Текущий статус: локальный sync уже работает, но Markdown в Obsidian всё ещё выглядит слишком тяжело. Архитектура: Next.js API + Telegram + Supabase. Текущая рабочая связка: webhook - очередь задач - генерация Markdown. Что сделали: подняли локальный sync - привели export к детерминированному виду. Решения: raw_text сохраняем без изменений. Следующие шаги: укоротить заголовки - убрать английский в кратком - сделать исходную запись сворачиваемой.",
+  cleanedText: null,
+  summary: "Detailed status and architecture of the reports bot export pipeline",
+  type: "note",
+};
+
+assert.equal(getShortTitle(projectItem), "TrainingPeaks Reports Bot — статус на 2026-05-07");
+
+const projectMarkdown = toMarkdownDocument(projectItem);
+assert.ok(projectMarkdown.includes("# TrainingPeaks Reports Bot — статус на 2026-05-07"));
+assert.ok(projectMarkdown.includes("## Кратко"));
+assert.ok(projectMarkdown.includes("собрать стабильный Telegram-бот для отчётов TrainingPeaks."));
+assert.ok(!projectMarkdown.includes(projectItem.summary ?? ""));
+assert.ok(projectMarkdown.includes("## Суть"));
+assert.ok(projectMarkdown.includes("Markdown в Obsidian всё ещё выглядит слишком тяжело."));
+assert.ok(projectMarkdown.includes("## Архитектура"));
+assert.ok(projectMarkdown.includes("## Что сделано"));
+assert.ok(projectMarkdown.includes("## Важные решения"));
+assert.ok(projectMarkdown.includes("## Следующие шаги"));
+assert.ok(projectMarkdown.includes("- очередь задач"));
+assert.ok(projectMarkdown.includes("<details>"));
 
 const serviceSource = readFileSync(
   new URL("../src/features/obsidian-export/service.ts", import.meta.url),
