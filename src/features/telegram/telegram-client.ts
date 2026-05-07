@@ -1,5 +1,14 @@
 const TELEGRAM_API_BASE_URL = "https://api.telegram.org";
 
+export type TelegramReplyKeyboardMarkup = {
+  keyboard: string[][];
+  resize_keyboard?: boolean;
+  one_time_keyboard?: boolean;
+  is_persistent?: boolean;
+  input_field_placeholder?: string;
+  selective?: boolean;
+};
+
 type TelegramApiSuccess<T> = {
   ok: true;
   result: T;
@@ -29,7 +38,15 @@ function getTelegramBotToken(): string {
   return token;
 }
 
-async function postTelegramMessage(chatId: string | number, text: string): Promise<void> {
+type SendTelegramMessageOptions = {
+  replyMarkup?: TelegramReplyKeyboardMarkup;
+};
+
+async function postTelegramMessage(
+  chatId: string | number,
+  text: string,
+  options: SendTelegramMessageOptions = {}
+): Promise<void> {
   const token = getTelegramBotToken();
 
   const response = await fetch(`${TELEGRAM_API_BASE_URL}/bot${token}/sendMessage`, {
@@ -40,6 +57,7 @@ async function postTelegramMessage(chatId: string | number, text: string): Promi
     body: JSON.stringify({
       chat_id: chatId,
       text,
+      reply_markup: options.replyMarkup,
     }),
   });
 
@@ -113,9 +131,13 @@ export async function downloadTelegramFile(filePath: string): Promise<{
   };
 }
 
-export async function sendTelegramMessage(chatId: string | number, text: string) {
+export async function sendTelegramMessage(
+  chatId: string | number,
+  text: string,
+  options: SendTelegramMessageOptions = {}
+) {
   try {
-    await postTelegramMessage(chatId, text);
+    await postTelegramMessage(chatId, text, options);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unknown error while sending Telegram message";
@@ -127,6 +149,10 @@ export async function sendTelegramMessage(chatId: string | number, text: string)
   }
 }
 
-export async function sendTelegramMessageOrThrow(chatId: string | number, text: string) {
-  await postTelegramMessage(chatId, text);
+export async function sendTelegramMessageOrThrow(
+  chatId: string | number,
+  text: string,
+  options: SendTelegramMessageOptions = {}
+) {
+  await postTelegramMessage(chatId, text, options);
 }

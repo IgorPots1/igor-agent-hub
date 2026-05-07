@@ -39,6 +39,7 @@ import {
 } from "@/features/brain/types";
 import type { ParsedTelegramUpdate } from "@/features/telegram/parser";
 import { sendTelegramMessage } from "@/features/telegram/telegram-client";
+import { getTelegramMainMenuMessage, sendTelegramMenuMessage } from "@/features/telegram/menu";
 
 const TELEGRAM_ITEM_TEXT_LIMIT = 90;
 const SUMMARY_ITEM_LIMIT = 50;
@@ -73,23 +74,6 @@ function formatBrainItemsList(
   });
 
   return ["🧠 Последние записи:", ...lines].join("\n");
-}
-
-function formatHelpMessage(): string {
-  return [
-    "🧠 Второй мозг",
-    "",
-    "/save текст — сохранить запись",
-    "/remind время текст — поставить напоминание",
-    "/reminders — ближайшие напоминания",
-    "/list — последние записи",
-    "/inbox — неразобранное",
-    "/last — последняя запись подробно",
-    "/search запрос — поиск",
-    "/summary today — итоги за сегодня",
-    "/summary week — итоги за неделю",
-    "/stats — статистика мозга",
-  ].join("\n");
 }
 
 function truncateTelegramItemText(text: string, maxLength: number): string {
@@ -492,7 +476,10 @@ export async function handleTelegramCommand(
   }
 
   if (flags.isHelp) {
-    await sendTelegramMessage(parsedMessage.chatId, withReplyPrefix(options.replyPrefix, formatHelpMessage()));
+    await sendTelegramMenuMessage(
+      parsedMessage.chatId,
+      withReplyPrefix(options.replyPrefix, getTelegramMainMenuMessage())
+    );
     return "handled";
   }
 

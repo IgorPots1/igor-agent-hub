@@ -1,4 +1,10 @@
 import { handleTelegramCommand } from "@/features/telegram/command-handler";
+import {
+  getTelegramMainMenuMessage,
+  isTelegramStartCommand,
+  routeTelegramMenuText,
+  sendTelegramMenuMessage,
+} from "@/features/telegram/menu";
 import { routeNaturalTelegramText } from "@/features/telegram/natural-router";
 import { parseTelegramUpdate } from "@/features/telegram/parser";
 import type { TelegramUpdate } from "@/features/telegram/types";
@@ -53,7 +59,26 @@ export async function POST(request: Request) {
     return okResponse();
   }
 
+  if (parsedMessage.text && isTelegramStartCommand(parsedMessage.text)) {
+    await sendTelegramMenuMessage(parsedMessage.chatId, getTelegramMainMenuMessage());
+    return okResponse();
+  }
+
   if (parsedMessage.text && !parsedMessage.text.startsWith("/")) {
+    const menuRoute = routeTelegramMenuText(parsedMessage.text);
+
+    if (menuRoute.kind === "command") {
+      await handleTelegramCommand(parsedMessage, {
+        messageText: menuRoute.messageText,
+      });
+      return okResponse();
+    }
+
+    if (menuRoute.kind === "message") {
+      await sendTelegramMenuMessage(parsedMessage.chatId, menuRoute.text);
+      return okResponse();
+    }
+
     const naturalRoute = routeNaturalTelegramText(parsedMessage.text);
 
     if (naturalRoute.kind === "command") {
