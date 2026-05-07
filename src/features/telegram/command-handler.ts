@@ -4,12 +4,12 @@ import {
   createReminderBrainItemFromTelegram,
   createTelegramBrainItem,
   getBrainItemsForStats,
-  getRecentBrainItems,
+  getRecentKnowledgeBrainItems,
   getReminderCommandText,
   getSearchQuery,
-  getInboxBrainItems,
-  getLatestBrainItem,
-  getLatestBrainItems,
+  getInboxKnowledgeBrainItems,
+  getLatestKnowledgeBrainItem,
+  getLatestKnowledgeBrainItems,
   isRemindCommand,
   isRemindersCommand,
   getSavedTelegramText,
@@ -22,7 +22,7 @@ import {
   isSaveCommand,
   isStatsCommand,
   isSummaryCommand,
-  searchBrainItems,
+  searchKnowledgeBrainItems,
   tryClassifyBrainItem,
 } from "@/features/brain/service";
 import {
@@ -180,8 +180,8 @@ function isIdeaItem(item: BrainItem): boolean {
   return item.type === "idea" || item.type === "insight" || item.type === "product_note";
 }
 
-function isTaskOrReminderItem(item: BrainItem): boolean {
-  return item.type === "task" || item.type === "reminder";
+function isTaskItem(item: BrainItem): boolean {
+  return item.type === "task";
 }
 
 function isContentItem(item: BrainItem): boolean {
@@ -206,10 +206,10 @@ function formatSummaryGroup(title: string, items: BrainItem[]): string[] {
 function formatBrainSummary(period: "today" | "week", items: BrainItem[]): string {
   const decisions = items.filter(isDecisionItem);
   const ideas = items.filter(isIdeaItem);
-  const tasksAndReminders = items.filter(isTaskOrReminderItem);
+  const tasks = items.filter(isTaskItem);
   const content = items.filter(isContentItem);
   const groupedItemIds = new Set(
-    [...decisions, ...ideas, ...tasksAndReminders, ...content].map((item) => item.id)
+    [...decisions, ...ideas, ...tasks, ...content].map((item) => item.id)
   );
   const other = items.filter((item) => !groupedItemIds.has(item.id));
   const periodLabel = period === "today" ? "сегодня" : "неделю";
@@ -223,7 +223,7 @@ function formatBrainSummary(period: "today" | "week", items: BrainItem[]): strin
     "",
     ...formatSummaryGroup("Идеи", ideas),
     "",
-    ...formatSummaryGroup("Задачи/напоминания", tasksAndReminders),
+    ...formatSummaryGroup("Задачи", tasks),
     "",
     ...formatSummaryGroup("Контент", content),
     "",
@@ -498,7 +498,7 @@ export async function handleTelegramCommand(
 
   if (flags.isInbox) {
     try {
-      const items = await getInboxBrainItems(10);
+      const items = await getInboxKnowledgeBrainItems(10);
 
       if (items.length === 0) {
         await sendTelegramMessage(
@@ -543,7 +543,7 @@ export async function handleTelegramCommand(
     }
 
     try {
-      const items = await getRecentBrainItems(period, SUMMARY_ITEM_LIMIT);
+      const items = await getRecentKnowledgeBrainItems(period, SUMMARY_ITEM_LIMIT);
 
       if (items.length === 0) {
         await sendTelegramMessage(
@@ -604,7 +604,7 @@ export async function handleTelegramCommand(
 
   if (flags.isLast) {
     try {
-      const item = await getLatestBrainItem();
+      const item = await getLatestKnowledgeBrainItem();
 
       if (!item) {
         await sendTelegramMessage(
@@ -646,7 +646,7 @@ export async function handleTelegramCommand(
     }
 
     try {
-      const items = await searchBrainItems(query, 10);
+      const items = await searchKnowledgeBrainItems(query, 10);
 
       if (items.length === 0) {
         await sendTelegramMessage(
@@ -701,7 +701,7 @@ export async function handleTelegramCommand(
   }
 
   try {
-    const items = await getLatestBrainItems(5);
+    const items = await getLatestKnowledgeBrainItems(5);
 
     if (items.length === 0) {
       await sendTelegramMessage(

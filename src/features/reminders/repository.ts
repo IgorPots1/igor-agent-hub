@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/features/supabase/server";
+import { DEFAULT_BRAIN_ITEM_STATUS } from "@/features/brain/types";
 import type {
   BrainReminder,
   BrainReminderStatus,
@@ -195,6 +196,68 @@ export async function markBrainReminderSent(id: string, sentAt: string): Promise
 
 function truncateReminderError(errorMessage: string): string {
   return errorMessage.slice(0, 300);
+}
+
+export async function archiveCompletedReminderBrainItems(olderThanIso: string): Promise<number> {
+  const supabase = createSupabaseServerClient();
+  const terminalStatuses: BrainReminderStatus[] = ["sent", "failed", "cancelled"];
+
+  const { data: completedRows, error: completedError } = await supabase
+    .from("brain_reminders")
+    .select("brain_item_id")
+    .in("status", terminalStatuses)
+    .lte("updated_at", olderThanIso);
+
+  if (completedError) {
+    throw new Error(`Failed to load completed brain reminders: ${completedError.message}`);
+  }
+
+  const candidateBrainItemIds = Array.from(
+    new Set(
+      ((completedRows as Array<{ brain_item_id: string }> | null) ?? [])
+        .map((row) => row.brain_item_id)
+        .filter(Boolean)
+    )
+  );
+
+  if (candidateBrainItemIds.length === 0) {
+    return 0;
+  }
+
+  const { data: pendingRows, error: pendingError } = await supabase
+    .from("brain_reminders")
+    .select("brain_item_id")
+    .in("brain_item_id", candidateBrainItemIds)
+    .eq("status", "pending");
+
+  if (pendingError) {
+    throw new Error(`Failed to load pending brain reminders: ${pendingError.message}`);
+  }
+
+  const pendingBrainItemIds = new Set(
+    (((pendingRows as Array<{ brain_item_id: string }> | null) ?? []).map((row) => row.brain_item_id))
+  );
+  const brainItemIdsToArchive = candidateBrainItemIds.filter((id) => !pendingBrainItemIds.has(id));
+
+  if (brainItemIdsToArchive.length === 0) {
+    return 0;
+  }
+
+  const { data: archivedRows, error: archiveError } = await supabase
+    .from("brain_items")
+    .update({
+      status: "archived",
+    })
+    .in("id", brainItemIdsToArchive)
+    .eq("type", "reminder")
+    .eq("status", DEFAULT_BRAIN_ITEM_STATUS)
+    .select("id");
+
+  if (archiveError) {
+    throw new Error(`Failed to archive completed reminder brain items: ${archiveError.message}`);
+  }
+
+  return ((archivedRows as Array<{ id: string }> | null) ?? []).length;
 }
 
 export async function rescheduleBrainReminder(

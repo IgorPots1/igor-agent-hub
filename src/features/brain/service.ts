@@ -2,12 +2,18 @@ import { classifyBrainItem } from "@/features/brain/ai-classifier";
 import {
   createBrainItem,
   getLatestBrainItem as getLatestBrainItemFromRepository,
+  getLatestKnowledgeBrainItem as getLatestKnowledgeBrainItemFromRepository,
   listAllActiveBrainItems,
+  listAllActiveKnowledgeBrainItems,
   listActiveBrainItemsForStats,
   listActiveBrainItemsSince,
+  listActiveKnowledgeBrainItemsSince,
   listInboxBrainItems,
+  listInboxKnowledgeBrainItems,
   listLatestBrainItems,
+  listLatestKnowledgeBrainItems,
   searchBrainItems as searchBrainItemsFromRepository,
+  searchKnowledgeBrainItems as searchKnowledgeBrainItemsFromRepository,
   updateBrainItemClassification,
 } from "@/features/brain/repository";
 import {
@@ -222,12 +228,24 @@ export async function getLatestBrainItems(limit = 5): Promise<BrainItem[]> {
   return listLatestBrainItems(limit);
 }
 
+export async function getLatestKnowledgeBrainItems(limit = 5): Promise<BrainItem[]> {
+  return listLatestKnowledgeBrainItems(limit);
+}
+
 export async function getLatestBrainItem(): Promise<BrainItem | null> {
   return getLatestBrainItemFromRepository();
 }
 
+export async function getLatestKnowledgeBrainItem(): Promise<BrainItem | null> {
+  return getLatestKnowledgeBrainItemFromRepository();
+}
+
 export async function getInboxBrainItems(limit = 10): Promise<BrainItem[]> {
   return listInboxBrainItems(limit);
+}
+
+export async function getInboxKnowledgeBrainItems(limit = 10): Promise<BrainItem[]> {
+  return listInboxKnowledgeBrainItems(limit);
 }
 
 export async function getRecentBrainItems(
@@ -240,12 +258,26 @@ export async function getRecentBrainItems(
   return listActiveBrainItemsSince(since.toISOString(), limit);
 }
 
+export async function getRecentKnowledgeBrainItems(
+  period: "today" | "week",
+  limit = 50
+): Promise<BrainItem[]> {
+  const days = period === "today" ? 1 : 7;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+  return listActiveKnowledgeBrainItemsSince(since.toISOString(), limit);
+}
+
 export async function getBrainItemsForStats(limit = 500): Promise<BrainItem[]> {
   return listActiveBrainItemsForStats(limit);
 }
 
 export async function getAllActiveBrainItems(): Promise<BrainItem[]> {
   return listAllActiveBrainItems();
+}
+
+export async function getAllActiveKnowledgeBrainItems(): Promise<BrainItem[]> {
+  return listAllActiveKnowledgeBrainItems();
 }
 
 export async function searchBrainItems(query: string, limit = 10): Promise<BrainItem[]> {
@@ -256,4 +288,14 @@ export async function searchBrainItems(query: string, limit = 10): Promise<Brain
   }
 
   return searchBrainItemsFromRepository(normalizedQuery, limit);
+}
+
+export async function searchKnowledgeBrainItems(query: string, limit = 10): Promise<BrainItem[]> {
+  const normalizedQuery = query.trim();
+
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  return searchKnowledgeBrainItemsFromRepository(normalizedQuery, limit);
 }

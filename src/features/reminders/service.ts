@@ -1,4 +1,5 @@
 import {
+  archiveCompletedReminderBrainItems,
   claimPendingBrainReminder,
   createBrainReminders,
   listDueBrainReminders,
@@ -19,6 +20,7 @@ const MANUAL_REMINDER_TAG = "напоминание";
 const REMINDER_TEXT_LIMIT = 90;
 const REMINDER_CLAIM_LEASE_MS = 60_000;
 const REMINDER_RETRY_DELAY_MS = 5 * 60_000;
+const COMPLETED_REMINDER_ARCHIVE_DELAY_MS = 24 * 60 * 60 * 1000;
 const MAX_REMINDER_DELIVERY_ATTEMPTS = 3;
 const DEFAULT_REMINDER_HOUR = 10;
 const DEFAULT_REMINDER_MINUTE = 0;
@@ -1064,11 +1066,18 @@ export async function getUpcomingRemindersMessageForChat(
   return formatUpcomingRemindersMessage(reminders, now);
 }
 
+export async function archiveStaleCompletedReminderBrainItems(now = new Date()): Promise<number> {
+  return archiveCompletedReminderBrainItems(
+    new Date(now.getTime() - COMPLETED_REMINDER_ARCHIVE_DELAY_MS).toISOString()
+  );
+}
+
 export async function deliverDueReminders(limit = 20): Promise<{
   processed: number;
   sent: number;
   failed: number;
   skipped: number;
+  archived: number;
 }> {
   const now = new Date();
   const dueReminders = await listDueBrainReminders(
@@ -1120,10 +1129,13 @@ export async function deliverDueReminders(limit = 20): Promise<{
     }
   }
 
+  const archived = await archiveStaleCompletedReminderBrainItems(now);
+
   return {
     processed: dueReminders.length,
     sent,
     failed,
     skipped,
+    archived,
   };
 }

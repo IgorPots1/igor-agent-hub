@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import { getAllActiveBrainItems } from "@/features/brain/service";
+import { getAllActiveKnowledgeBrainItems } from "@/features/brain/service";
 import { getArchivePath, toMarkdownDocument } from "@/features/obsidian-export/formatter";
 
 const ZIP_FILENAME = "obsidian-export.zip";
@@ -11,7 +11,7 @@ export type ObsidianExportResult = {
 };
 
 export async function buildObsidianExportArchive(): Promise<ObsidianExportResult> {
-  const items = await getAllActiveBrainItems();
+  const items = await getAllActiveKnowledgeBrainItems();
   const zip = new JSZip();
 
   for (const item of items) {
