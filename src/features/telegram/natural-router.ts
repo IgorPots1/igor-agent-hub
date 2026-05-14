@@ -13,6 +13,24 @@ const REMINDER_PATTERNS = [
   /^(?:напомни)(?:,\s*|\s+|$)/iu,
 ];
 
+const REMINDER_VERB_PATTERN =
+  /(?:^|[\s,.;:!?()[\]{}"'«»„“”`-])(?:напомни|напомнить|напомню)(?=$|[\s,.;:!?()[\]{}"'«»„“”`-])/iu;
+const REMINDER_TOKEN_BOUNDARY = String.raw`(?=$|[\s,.;:!?()[\]{}"'«»„“”` + "`" + String.raw`-])`;
+const REMINDER_MONTH_PATTERN =
+  "(?:январ(?:ь|я)|янв|феврал(?:ь|я)|фев|март|марта|мар|апрел(?:ь|я)|апр|ма[йя]|июн(?:ь|я)?|июл(?:ь|я)?|август|авг|сентябр(?:ь|я)|сент|сен|октябр(?:ь|я)|окт|ноябр(?:ь|я)|ноя|декабр(?:ь|я)|дек)";
+const REMINDER_WEEKDAY_PATTERN =
+  "(?:понедельник(?:а)?|вторник(?:а)?|среда|среду|четверг(?:а)?|пятница|пятницу|суббота|субботу|воскресенье)";
+const LEADING_REMINDER_TIME_MARKER_PATTERN = new RegExp(
+  `^(?:` +
+    `(?:сегодня|завтра|послезавтра)${REMINDER_TOKEN_BOUNDARY}` +
+    `|через${REMINDER_TOKEN_BOUNDARY}` +
+    `|(?:в|во)\\s+${REMINDER_WEEKDAY_PATTERN}${REMINDER_TOKEN_BOUNDARY}` +
+    `|\\d{1,2}\\s*[./]\\s*\\d{1,2}(?:\\s*[./]\\s*\\d{2,4})?\\b` +
+    `|\\d{1,2}(?:\\s*-?(?:го|ое|е))?\\s+${REMINDER_MONTH_PATTERN}${REMINDER_TOKEN_BOUNDARY}` +
+    `)`,
+  "iu"
+);
+
 const SAVE_PATTERNS = [
   /^(?:сохрани)(?:\s+|$)/iu,
   /^(?:запиши)(?:\s+|$)/iu,
@@ -107,6 +125,14 @@ function isSummaryWeek(normalizedText: string): boolean {
   );
 }
 
+function hasStrongReminderIntent(text: string): boolean {
+  if (REMINDER_PATTERNS.some((pattern) => pattern.test(text))) {
+    return true;
+  }
+
+  return LEADING_REMINDER_TIME_MARKER_PATTERN.test(text) && REMINDER_VERB_PATTERN.test(text);
+}
+
 export function routeNaturalTelegramText(originalText: string): NaturalTelegramRoute {
   const normalizedText = normalizeWhitespace(originalText);
 
@@ -148,10 +174,8 @@ export function routeNaturalTelegramText(originalText: string): NaturalTelegramR
     return toCommandRoute("/stats");
   }
 
-  const reminderRoute = matchCommandPayload(normalizedText, REMINDER_PATTERNS, "/remind");
-
-  if (reminderRoute) {
-    return reminderRoute;
+  if (hasStrongReminderIntent(normalizedText)) {
+    return toCommandRoute(`/remind ${normalizedText}`);
   }
 
   const searchRoute = matchCommandPayload(normalizedText, SEARCH_PATTERNS, "/search");

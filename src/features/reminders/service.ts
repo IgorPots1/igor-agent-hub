@@ -512,6 +512,15 @@ function extractLeadingTime(
 
 function cleanupReminderRawText(value: string): string {
   return value
+    .replace(
+      /^(?:напомнить|напомни|напомню)(?:\s+мне)?(?:\s*[,.:;-]\s*|\s+|$)/iu,
+      ""
+    )
+    .replace(
+      /^[\s,.;:!?-]*(?:напомнить|напомни|напомню)(?:\s+мне)?(?:\s*[,.:;-]\s*|\s+|$)/iu,
+      ""
+    )
+    .replace(/^(?:мне)(?:\s*[,.:;-]\s*|\s+|$)/iu, "")
     .replace(/^[\s,.;:!?-]+/u, "")
     .replace(/^(?:что|чтобы)(?:\s+|$)/iu, "")
     .replace(/^[\s,.;:!?-]+/u, "")

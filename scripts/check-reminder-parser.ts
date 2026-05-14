@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { parseManualReminder } from "../src/features/reminders/service";
+import { parseManualReminder } from "../src/features/reminders/service.ts";
 
 const NOW = new Date("2026-05-05T08:00:00.000Z");
 const REMINDER_TEXT = "купить подарок";
@@ -71,6 +71,21 @@ const successCases: SuccessfulCase[] = [
   {
     input: `15.06.2026 ${REMINDER_TEXT}`,
     expectedLocalDateTime: "15.06.2026 10:00",
+  },
+  {
+    input: "8 июня в 10:00 напомни написать Семешиной",
+    expectedRawText: "написать Семешиной",
+    expectedLocalDateTime: "08.06.2026 10:00",
+  },
+  {
+    input: "через 2 часа напомни выпить воды",
+    expectedRawText: "выпить воды",
+    expectedLocalDateTime: "05.05.2026 12:00",
+  },
+  {
+    input: "напомни мне завтра в 10 позвонить Маше",
+    expectedRawText: "позвонить Маше",
+    expectedLocalDateTime: "06.05.2026 10:00",
   },
 ];
 
