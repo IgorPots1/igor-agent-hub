@@ -25,10 +25,23 @@ export const BRAIN_ITEM_CATEGORIES = [
   "Личное",
 ] as const;
 
+export const BRAIN_ITEM_PROJECTS = [
+  "agent-hub",
+  "ai-running-coach",
+  "trainingpeaks-coach-os",
+  "run-club",
+  "run-together",
+  "content",
+  "students",
+  "personal",
+  "business",
+] as const;
+
 export const DEFAULT_BRAIN_CATEGORIES = BRAIN_ITEM_CATEGORIES;
 
 export type BrainItemType = (typeof BRAIN_ITEM_TYPES)[number];
 export type BrainItemCategory = (typeof BRAIN_ITEM_CATEGORIES)[number];
+export type BrainItemProject = (typeof BRAIN_ITEM_PROJECTS)[number];
 
 export const DEFAULT_BRAIN_ITEM_TYPE: BrainItemType = "note";
 export const DEFAULT_BRAIN_ITEM_CATEGORY: BrainItemCategory = "Inbox";
@@ -76,6 +89,8 @@ export type CreateBrainItemInput = {
 export type BrainItemClassification = {
   type: BrainItemType;
   category: BrainItemCategory;
+  project: BrainItemProject | null;
+  topic: string | null;
   tags: string[];
   summary: string | null;
 };

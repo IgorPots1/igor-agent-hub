@@ -536,6 +536,8 @@ export async function updateBrainItemClassification(
     .update({
       type: classification.type,
       category: classification.category,
+      project: classification.project,
+      topic: classification.topic,
       tags: classification.tags,
       summary: classification.summary,
     })

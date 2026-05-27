@@ -2,10 +2,12 @@ import OpenAI from "openai";
 
 import {
   BRAIN_ITEM_CATEGORIES,
+  BRAIN_ITEM_PROJECTS,
   BRAIN_ITEM_TYPES,
   DEFAULT_BRAIN_ITEM_CATEGORY,
   DEFAULT_BRAIN_ITEM_TYPE,
 } from "@/features/brain/types";
+import { sanitizeBrainItemProject, sanitizeBrainItemTopic } from "@/features/brain/project-topic";
 import type { BrainItemClassification } from "@/features/brain/types";
 
 const AI_CLASSIFIER_MODEL = "gpt-4.1-mini";
@@ -20,6 +22,8 @@ const categorySet = new Set<string>(BRAIN_ITEM_CATEGORIES);
 type AiClassificationResponse = {
   type?: unknown;
   category?: unknown;
+  project?: unknown;
+  topic?: unknown;
   tags?: unknown;
   summary?: unknown;
 };
@@ -101,12 +105,17 @@ function buildPrompt(rawText: string): string {
     "Return strict JSON only.",
     `Allowed type values: ${BRAIN_ITEM_TYPES.join(", ")}`,
     `Allowed category values: ${BRAIN_ITEM_CATEGORIES.join(", ")}`,
+    `Allowed project values: ${BRAIN_ITEM_PROJECTS.join(", ")}`,
     "Validation rules:",
     "- Use the original user text as the source of truth.",
+    "- project must be one of allowed project values or null.",
+    "- topic must be short, slug-like, lowercase, useful, or null if unsure.",
+    "- Do not invent overly specific topics.",
     "- tags must be a JSON array with up to 5 short strings.",
     "- Trim and dedupe tags.",
     "- summary must be short and one sentence.",
     "- Never rewrite or return raw_text.",
+    "- ops_log detection is handled before this step; do not use ops_log here.",
     "- If unsure, prefer type=note and category=Inbox.",
     "",
     "Category rules:",
@@ -153,7 +162,7 @@ export async function classifyBrainItem(rawText: string): Promise<BrainItemClass
         {
           role: "system",
           content:
-            "You classify second-brain notes. Output strict JSON with keys type, category, tags, summary.",
+            "You classify second-brain notes. Output strict JSON with keys type, category, project, topic, tags, summary.",
         },
         {
           role: "user",
@@ -183,6 +192,8 @@ export async function classifyBrainItem(rawText: string): Promise<BrainItemClass
   return {
     type: sanitizeType(parsed.type),
     category: sanitizeCategory(parsed.category),
+    project: sanitizeBrainItemProject(parsed.project),
+    topic: sanitizeBrainItemTopic(parsed.topic),
     tags: sanitizeTags(parsed.tags),
     summary: sanitizeSummary(parsed.summary),
   };

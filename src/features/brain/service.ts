@@ -1,6 +1,11 @@
 import { classifyBrainItem } from "@/features/brain/ai-classifier";
 import { detectBrainItemOpsLog } from "@/features/brain/ops-log-detector";
 import {
+  inferBrainItemProjectTopic,
+  sanitizeBrainItemProject,
+  sanitizeBrainItemTopic,
+} from "@/features/brain/project-topic";
+import {
   createBrainItem,
   getLatestBrainItem as getLatestBrainItemFromRepository,
   getLatestKnowledgeBrainItem as getLatestKnowledgeBrainItemFromRepository,
@@ -225,11 +230,18 @@ export async function tryClassifyBrainItem(
   }
 
   try {
+    const deterministicHints = inferBrainItemProjectTopic(item.rawText, item.category);
     const classification = await classifyBrainItem(item.rawText);
     const mergedTags = getUniqueTags([...(options.preserveTags ?? []), ...classification.tags]);
+    const deterministicProject = sanitizeBrainItemProject(deterministicHints.project);
+    const deterministicTopic = sanitizeBrainItemTopic(deterministicHints.topic);
+    const aiProject = sanitizeBrainItemProject(classification.project);
+    const aiTopic = sanitizeBrainItemTopic(classification.topic);
 
     return await updateBrainItemClassification(item.id, {
       ...classification,
+      project: deterministicProject ?? aiProject,
+      topic: deterministicTopic ?? aiTopic,
       tags: mergedTags,
     });
   } catch (error) {

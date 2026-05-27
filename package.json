@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint .",
     "check:ops-log-detector": "node --experimental-strip-types scripts/check-ops-log-detector.ts",
+    "check:brain-project-topic": "node --experimental-strip-types scripts/check-brain-project-topic.ts",
     "check:obsidian-export": "node --experimental-strip-types scripts/check-obsidian-export.mts",
     "obsidian:sync": "node --experimental-strip-types tools/obsidian-sync/sync-obsidian-export.mts"
   },
