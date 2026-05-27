@@ -549,3 +549,23 @@ export async function updateBrainItemClassification(
 
   return mapBrainItemRow(data as BrainItemRow);
 }
+
+export async function markBrainItemAsOpsLog(id: string): Promise<BrainItem> {
+  const supabase = createSupabaseServerClient();
+
+  const { data, error } = await supabase
+    .from("brain_items")
+    .update({
+      type: OPS_LOG_BRAIN_ITEM_TYPE,
+      no_export: true,
+    })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(`Failed to mark brain item as ops log: ${error.message}`);
+  }
+
+  return mapBrainItemRow(data as BrainItemRow);
+}

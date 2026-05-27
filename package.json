@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "check:ops-log-detector": "node --experimental-strip-types scripts/check-ops-log-detector.ts",
     "check:obsidian-export": "node --experimental-strip-types scripts/check-obsidian-export.mts",
     "obsidian:sync": "node --experimental-strip-types tools/obsidian-sync/sync-obsidian-export.mts"
   },

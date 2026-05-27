@@ -10,6 +10,7 @@ export const BRAIN_ITEM_TYPES = [
   "bug_fix",
   "content_idea",
   "product_note",
+  "ops_log",
 ] as const;
 
 export const BRAIN_ITEM_CATEGORIES = [

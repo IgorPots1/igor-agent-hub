@@ -1,4 +1,5 @@
 import { classifyBrainItem } from "@/features/brain/ai-classifier";
+import { detectBrainItemOpsLog } from "@/features/brain/ops-log-detector";
 import {
   createBrainItem,
   getLatestBrainItem as getLatestBrainItemFromRepository,
@@ -12,6 +13,7 @@ import {
   listInboxKnowledgeBrainItems,
   listLatestBrainItems,
   listLatestKnowledgeBrainItems,
+  markBrainItemAsOpsLog,
   searchBrainItems as searchBrainItemsFromRepository,
   searchKnowledgeBrainItems as searchKnowledgeBrainItemsFromRepository,
   updateBrainItemClassification,
@@ -206,6 +208,22 @@ export async function tryClassifyBrainItem(
   item: BrainItem,
   options: { preserveTags?: string[] } = {}
 ): Promise<BrainItem | null> {
+  const opsLogDetection = detectBrainItemOpsLog(item.rawText);
+
+  if (opsLogDetection.isOpsLog) {
+    try {
+      return await markBrainItemAsOpsLog(item.id);
+    } catch (error) {
+      console.error("Failed to mark brain item as ops_log", {
+        brainItemId: item.id,
+        reasons: opsLogDetection.reasons,
+        error,
+      });
+
+      return null;
+    }
+  }
+
   try {
     const classification = await classifyBrainItem(item.rawText);
     const mergedTags = getUniqueTags([...(options.preserveTags ?? []), ...classification.tags]);
