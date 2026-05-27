@@ -26,11 +26,13 @@ type BrainItemRow = {
   telegram_user_id: string | null;
   telegram_username: string | null;
   telegram_message_id: string | null;
+  no_export: boolean | null;
   status: string | null;
   created_at: string;
 };
 
 const REMINDER_BRAIN_ITEM_TYPE = "reminder";
+const OPS_LOG_BRAIN_ITEM_TYPE = "ops_log";
 const MANUAL_REMINDER_TAG = "напоминание";
 const SYSTEM_REMINDER_SOURCES = new Set(["telegram_reminder", "system_reminder"]);
 
@@ -50,12 +52,16 @@ function mapBrainItemRow(row: BrainItemRow): BrainItem {
     telegramUserId: row.telegram_user_id,
     telegramUsername: row.telegram_username,
     telegramMessageId: row.telegram_message_id,
+    noExport: row.no_export ?? false,
     status: row.status ?? DEFAULT_BRAIN_ITEM_STATUS,
     createdAt: row.created_at,
   };
 }
 
-type BrainItemFilterable = Pick<BrainItem, "category" | "source" | "status" | "tags" | "type">;
+type BrainItemFilterable = Pick<
+  BrainItem,
+  "category" | "source" | "status" | "tags" | "type" | "noExport"
+>;
 
 function normalizeBrainItemValue(value: string | null | undefined): string {
   return value?.trim().toLocaleLowerCase("ru") ?? "";
@@ -78,8 +84,17 @@ export function isReminderBrainItem(item: BrainItemFilterable): boolean {
   return item.tags.some((tag) => normalizeBrainItemValue(tag) === MANUAL_REMINDER_TAG);
 }
 
+export function isOpsLogBrainItem(item: Pick<BrainItemFilterable, "type">): boolean {
+  return normalizeBrainItemValue(item.type) === OPS_LOG_BRAIN_ITEM_TYPE;
+}
+
 export function isKnowledgeBrainItem(item: BrainItemFilterable): boolean {
-  return isActiveBrainItem(item) && !isReminderBrainItem(item);
+  return (
+    isActiveBrainItem(item) &&
+    !item.noExport &&
+    !isReminderBrainItem(item) &&
+    !isOpsLogBrainItem(item)
+  );
 }
 
 export function isInboxBrainItem(item: BrainItemFilterable): boolean {
@@ -163,6 +178,7 @@ export async function createBrainItem(
       telegram_user_id: input.telegramUserId ?? null,
       telegram_username: input.telegramUsername ?? null,
       telegram_message_id: input.telegramMessageId ?? null,
+      no_export: input.noExport ?? false,
       status: input.status ?? DEFAULT_BRAIN_ITEM_STATUS,
     })
     .select("*")

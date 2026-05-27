@@ -481,8 +481,11 @@ export function getSafeMarkdownFilename(item: BrainItem): string {
 
 export function toFrontmatter(item: BrainItem): string {
   const frontmatter = normalizeExportFrontmatter(item);
+  const telegramMessageId = item.telegramMessageId?.trim();
   const lines = [
     "---",
+    `id: ${toYamlScalar(item.id)}`,
+    ...(telegramMessageId ? [`telegram_message_id: ${toYamlScalar(telegramMessageId)}`] : []),
     `type: ${toYamlScalar(frontmatter.type)}`,
     `source: ${toYamlScalar(frontmatter.source)}`,
     `status: ${toYamlScalar(frontmatter.status)}`,

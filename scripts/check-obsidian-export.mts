@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import JSZip from "jszip";
 
 import {
   getArchivePath,
@@ -28,6 +29,7 @@ const sampleItem: BrainItem = {
   telegramUserId: null,
   telegramUsername: null,
   telegramMessageId: null,
+  noExport: false,
   status: "active",
   createdAt: "2026-05-05T10:30:00.000Z",
 };
@@ -51,6 +53,8 @@ const frontmatter = toFrontmatter(sampleItem);
 
 assert.ok(frontmatter.startsWith("---\n"));
 assert.ok(frontmatter.endsWith("\n---"));
+assert.ok(frontmatter.includes(`id: "${sampleItem.id}"`));
+assert.ok(!frontmatter.includes("telegram_message_id:"));
 assert.ok(frontmatter.includes('type: "note"'));
 assert.ok(frontmatter.includes('source: "telegram"'));
 assert.ok(frontmatter.includes('status: "active"'));
@@ -87,6 +91,7 @@ const taskItem: BrainItem = {
   type: "task",
   source: "telegram_forward",
   tags: ["вечерний обзор", "Obsidian Export"],
+  noExport: false,
 };
 
 const taskMarkdown = toMarkdownDocument(taskItem);
@@ -102,6 +107,7 @@ const projectItem: BrainItem = {
   cleanedText: null,
   summary: "Detailed status and architecture of the reports bot export pipeline",
   type: "note",
+  noExport: false,
 };
 
 assert.equal(getShortTitle(projectItem), "TrainingPeaks Reports Bot — статус на 2026-05-07");
@@ -120,11 +126,71 @@ assert.ok(projectMarkdown.includes("## Следующие шаги"));
 assert.ok(projectMarkdown.includes("- очередь задач"));
 assert.ok(projectMarkdown.includes("<details>"));
 
+const telegramTraceItem: BrainItem = {
+  ...sampleItem,
+  id: "trace-1111-2222-3333-444455556666",
+  telegramMessageId: "9999",
+  noExport: false,
+};
+
+const traceFrontmatter = toFrontmatter(telegramTraceItem);
+assert.ok(traceFrontmatter.includes(`id: "${telegramTraceItem.id}"`));
+assert.ok(traceFrontmatter.includes('telegram_message_id: "9999"'));
+
+const reminderItem: BrainItem = {
+  ...sampleItem,
+  id: "reminder-1111-2222-3333-444455556666",
+  type: "reminder",
+  noExport: false,
+};
+const noExportItem: BrainItem = {
+  ...sampleItem,
+  id: "noexport-1111-2222-3333-444455556666",
+  noExport: true,
+};
+
+const opsLogItem: BrainItem = {
+  ...sampleItem,
+  id: "opslog-1111-2222-3333-444455556666",
+  type: "ops_log",
+  noExport: false,
+};
+
+const expectedArchivePath = getArchivePath(sampleItem);
+assert.ok(expectedArchivePath.startsWith("Agent-Hub/"));
+
 const serviceSource = readFileSync(
   new URL("../src/features/obsidian-export/service.ts", import.meta.url),
   "utf8"
 );
 assert.ok(serviceSource.includes("getAllActiveKnowledgeBrainItems"));
 assert.ok(!serviceSource.includes("getAllActiveBrainItems()"));
+assert.ok(serviceSource.includes("zip.generateAsync"));
+
+const repositorySource = readFileSync(
+  new URL("../src/features/brain/repository.ts", import.meta.url),
+  "utf8"
+);
+assert.ok(repositorySource.includes("!item.noExport"));
+assert.ok(repositorySource.includes('normalizeBrainItemValue(item.type) === OPS_LOG_BRAIN_ITEM_TYPE'));
+assert.ok(repositorySource.includes("!isReminderBrainItem(item)"));
+
+const knowledgeCandidates = [sampleItem, reminderItem, noExportItem, opsLogItem];
+const selectedKnowledgeItems = knowledgeCandidates.filter(
+  (item) =>
+    item.status === "active" &&
+    !item.noExport &&
+    item.type !== "reminder" &&
+    item.type !== "ops_log"
+);
+assert.equal(selectedKnowledgeItems.length, 1);
+assert.equal(selectedKnowledgeItems[0]?.id, sampleItem.id);
+
+const zip = new JSZip();
+for (const item of selectedKnowledgeItems) {
+  zip.file(getArchivePath(item), toMarkdownDocument(item));
+}
+const archive = await zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+assert.ok(archive.length > 0);
 
 console.log("Obsidian export checks passed.");

@@ -49,6 +49,7 @@ export type BrainItem = {
   telegramUserId: string | null;
   telegramUsername: string | null;
   telegramMessageId: string | null;
+  noExport: boolean;
   status: string;
   createdAt: string;
 };
@@ -67,6 +68,7 @@ export type CreateBrainItemInput = {
   telegramUserId?: string | null;
   telegramUsername?: string | null;
   telegramMessageId?: string | null;
+  noExport?: boolean;
   status?: string;
 };
 
