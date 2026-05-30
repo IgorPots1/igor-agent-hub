@@ -1,143 +1,93 @@
-# CLAUDE.md — Agent Hub / Second Brain
+# CLAUDE.md
 
-This repository is **Agent Hub** (package name: `igor-agent-hub`), also called **Second Brain** (`second-brain` in API markers). It is a personal Telegram-controlled knowledge capture system backed by Supabase, with Obsidian as an export target.
+## Project purpose
 
-## Not this repo
+`igor-agent-hub` is a local AI-assisted product repo for Agent Hub / Second Brain.
+It captures Telegram inputs, stores structured data in Supabase, and exports selected knowledge to Obsidian.
+This file defines how Claude Code should execute orchestrated tasks safely and predictably.
+Default behavior: stay within requested scope, keep changes minimal, and report clearly.
 
-Do **not** confuse this project with sibling systems:
+## Primary workflow with orchestrator
 
-| Name | Relationship |
-|------|--------------|
-| `igor-tp-reports-bot` | Separate repo — TrainingPeaks reports bot |
-| TrainingPeaks Reports Bot | Lives under `tools/trainingpeaks-export/` here but is **out of scope** for Second Brain work |
-| Coach OS | Separate product (`trainingpeaks-coach-os` is only a brain-item project label) |
-| billing | Separate system; may appear as a brain-item topic, not as code to change here |
+1. Identify the active run packet under `.orch/runs/<runId>/`.
+2. Read `.orch/runs/<runId>/TASK.md` first.
+3. Read `.orch/runs/<runId>/RUN_CONTEXT.md` next.
+4. If a scope file exists in the run packet, treat it as authoritative.
+5. Work only on files required by the task and allowed by scope.
+6. If a needed change is outside scope, stop and ask before editing.
+7. Keep implementation narrow; avoid opportunistic refactors.
+8. Run project checks required by task or repo standards before reporting.
+9. Prepare a final report Igor can pass back into orchestrator.
 
-When working on Second Brain, ignore `tools/trainingpeaks-export/` unless the task explicitly targets that tool.
+## Scope discipline
 
-## What this app does
+- Treat `.orch/runs/<runId>/` as task context, not product runtime code.
+- Do not edit unrelated modules "while here."
+- Do not rewrite large docs unless explicitly requested.
+- Preserve existing behavior unless task explicitly changes behavior.
 
-1. **Capture** — Telegram messages (text, voice, forwards, commands, natural Russian phrases) become `brain_items` in Supabase.
-2. **Classify** — Ops-log detector runs first; surviving items get AI classification (type, category, project, topic, tags, summary) plus deterministic project/topic hints.
-3. **Remind** — Manual `/remind` and forwarded-message evening review flows create `brain_reminders`, delivered via external cron hitting `/api/cron/reminders`.
-4. **Export** — Active knowledge items export as Markdown + YAML frontmatter in a ZIP via `/api/export/obsidian`. Local `tools/obsidian-sync/` syncs that ZIP into an Obsidian vault folder.
+## Safety rules
 
-Supabase is the source of truth. Obsidian is read-only output.
+1. Do not modify `.env`, `.env.local`, `.env.*`, or secret material.
+2. Do not print secrets, tokens, keys, cookies, or private credentials.
+3. Do not modify `supabase/migrations/` unless explicitly requested.
+4. Do not call production APIs from scripts or code changes.
+5. Do not trigger Telegram sends unless task explicitly requires it.
+6. Do not deploy anything.
+7. Do not push commits unless explicitly instructed.
+8. Do not add dependencies unless explicitly requested.
 
-## Stack
+## Editing rules
 
-- **Next.js 15** (App Router), React 19, TypeScript
-- **Supabase** — `brain_items`, `brain_reminders`
-- **OpenAI** — item classification (`gpt-4.1-mini`), voice transcription
-- **Telegram Bot API** — primary UI
-- **JSZip** — Obsidian archive generation
+- Prefer the smallest viable diff.
+- Keep changes local to requested files and modules.
+- Do not change runtime code when task is docs/setup only.
+- Keep style consistent with surrounding files.
+- Avoid generated files in commits (`dist`, build artifacts, caches).
 
-## Directory map
+## Verification expectations
 
-```
-src/
-  app/api/
-    telegram/webhook/     # Main Telegram ingress
-    cron/reminders/       # Reminder delivery (Bearer CRON_SECRET)
-    export/obsidian/      # ZIP export (Bearer EXPORT_SECRET)
-    debug/version/        # Deploy marker (no auth)
-  features/
-    brain/                # Core domain: items, classification, ops-log detection
-    reminders/            # Parsing, scheduling, delivery
-    obsidian-export/      # Markdown/ZIP formatting
-    telegram/             # Webhook parsing, menu, natural router, voice
-    supabase/             # Server client
-    agents/               # Lightweight agent routing stub (memory/content/research)
-tools/
-  obsidian-sync/          # Local vault sync script (not deployed)
-  trainingpeaks-export/   # OUT OF SCOPE — separate tool
-supabase/migrations/      # Schema for brain_items and brain_reminders
-scripts/                  # Offline check scripts for detectors/formatters
-```
+Before final report:
 
-## Data model
+1. Inspect `package.json` scripts to confirm available checks.
+2. Run only cheap, documented checks relevant to the task.
+3. Do not invent new checks.
+4. If a check fails due to pre-existing issues, report it as pre-existing.
 
-### `brain_items`
+Typical checks for this repo:
 
-Core fields: `raw_text`, `cleaned_text`, `summary`, `type`, `category`, `project`, `topic`, `tags[]`, `source`, Telegram metadata, `status`, `no_export`, `created_at`.
+- `npm run lint`
+- `npm run build`
 
-**Knowledge items** (shown in Telegram lists/search and exported to Obsidian) are active items that are not reminders, not `ops_log`, and not `no_export`.
+## Git workflow expectations
 
-Item types include: `note`, `idea`, `insight`, `decision`, `task`, `reminder`, `summary`, `prompt`, `bug_fix`, `content_idea`, `product_note`, `ops_log`.
+1. Start with `git status --short`.
+2. If working tree is dirty and task requires clean baseline, stop and report.
+3. Stage only intended files.
+4. Commit only when explicitly instructed.
+5. Push only when explicitly instructed and checks pass.
 
-Categories include: `Inbox`, `Run Club`, `AI Running Coach`, `Run Together`, `Agent Hub`, `Контент`, `Ученики`, `Бизнес`, `Личное`.
+## Final report format
 
-### `brain_reminders`
+Use this exact section structure:
 
-Linked to `brain_items` via `brain_item_id`. Tracks `remind_at`, delivery `status`, retry `attempt_count`, `next_attempt_at`. Timezone for parsing/display: **Europe/Belgrade**.
+### Changed files
+- List each changed path.
+- Add one short reason per file.
 
-## API routes
+### Checks run
+- List each command.
+- Report pass/fail and key output summary.
 
-| Route | Auth | Purpose |
-|-------|------|---------|
-| `GET/POST /api/telegram/webhook` | Telegram (implicit) | Process updates |
-| `GET/POST /api/cron/reminders` | `Bearer CRON_SECRET` | Deliver due reminders |
-| `GET /api/export/obsidian` | `Bearer EXPORT_SECRET` | Download ZIP export |
-| `GET /api/debug/version` | None | Deploy identity marker |
+### Risks
+- Note any residual risks, assumptions, or unresolved items.
 
-Reminders use an **external cron** (every ~5 min), not Vercel Hobby cron.
+### Follow-up
+- Suggest the smallest next actions, if any.
 
-## Telegram commands
+## Practical defaults
 
-| Command | Action |
-|---------|--------|
-| `/save <text>` | Save note |
-| `/list` | Latest knowledge items |
-| `/inbox` | Inbox knowledge items |
-| `/last` | Most recent knowledge item |
-| `/search <query>` | Search knowledge items |
-| `/summary today\|week` | Period summary |
-| `/stats` | Brain statistics |
-| `/remind <when> <text>` | Create manual reminder |
-| `/reminders` | Upcoming reminders |
-| `/help` | Help text |
-
-Non-command Russian text is routed by `natural-router.ts` (save, remind, search, etc.). Plain text without a match is auto-saved. Forwarded text creates a task with evening-review reminders at 19:00/20:00 Belgrade time.
-
-## Environment variables
-
-See `.env.example`. Required for production:
-
-- `OPENAI_API_KEY`, `OPENAI_TRANSCRIPTION_MODEL`
-- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
-- `TELEGRAM_BOT_TOKEN`
-- `CRON_SECRET`, `EXPORT_SECRET`
-
-Never commit secrets. Do not add or modify `.env` files unless explicitly asked.
-
-## Scripts
-
-```bash
-npm run dev              # Local Next.js
-npm run build            # Production build
-npm run lint             # ESLint
-npm run check:ops-log-detector
-npm run check:brain-project-topic
-npm run check:obsidian-export
-npm run obsidian:sync    # Local Obsidian vault sync
-```
-
-## Conventions
-
-- Feature code lives in `src/features/<domain>/` with `types.ts`, `repository.ts`, `service.ts` split.
-- Repositories talk to Supabase; services hold business logic; API routes are thin handlers.
-- Classification: ops-log detector → deterministic project/topic hints → OpenAI classifier. Deterministic hints win over AI for project/topic.
-- Reminder parsing is Russian-first with Belgrade timezone. Do not silently change timezone or default hours without explicit request.
-- Obsidian export uses `getAllActiveKnowledgeBrainItems()` — respect `no_export`, `ops_log`, and reminder filters.
-- User-facing Telegram copy is mostly Russian. Keep tone consistent.
-- Prefer minimal, focused diffs. Match existing naming and file layout.
-
-## Safe change boundaries
-
-**In scope:** `src/features/brain`, `reminders`, `obsidian-export`, `telegram`, `supabase`, API routes, `tools/obsidian-sync`, related scripts and migrations (when requested).
-
-**Out of scope unless asked:** `tools/trainingpeaks-export/`, billing systems, Coach OS runtime, package dependency changes, env file edits, commits.
-
-## Before finishing
-
-Run `npm run lint` and `npm run build` when changing TypeScript. Run the relevant `check:*` script when touching ops-log detection, project/topic inference, or Obsidian export formatting.
+- If requirements conflict, prioritize task packet + explicit user instruction.
+- If uncertain about scope, ask once before proceeding.
+- Keep responses operational and concise.
+- End with clear status: done / blocked / needs decision.
