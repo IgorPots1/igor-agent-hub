@@ -19,6 +19,16 @@ Every change should be narrow, reviewable, and tied to an explicit task.
 - Follow allowed scope if provided in the run packet.
 - Do not edit outside approved scope without explicit approval.
 
+## Dev Orchestrator handoff workflow
+
+- Check `.orch/runs/<RUN_ID>/` when present.
+- Read `TASK.md` first.
+- Read `SCOPE.md` if present.
+- Use `EXECUTOR_HANDOFF.md` for paths and safety rules.
+- Keep changes inside declared scope unless explicitly justified.
+- Write `EXECUTOR_REPORT.md` before returning control.
+- Do not commit, push, or deploy unless explicitly instructed.
+
 ## Change policy
 
 - Prefer small scoped diffs over broad refactors.
