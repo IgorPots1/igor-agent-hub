@@ -27,6 +27,7 @@ Every change should be narrow, reviewable, and tied to an explicit task.
 - Use `EXECUTOR_HANDOFF.md` for paths and safety rules.
 - Keep changes inside declared scope unless explicitly justified.
 - Write `EXECUTOR_REPORT.md` before returning control.
+- `COMPLETE_COMMAND.sh` only closes the orchestrator run; it does not authorize commit, push, deploy, or any target-repo release action.
 - Do not commit, push, or deploy unless explicitly instructed.
 
 ## Change policy
