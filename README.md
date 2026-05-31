@@ -2,6 +2,8 @@
 
 Minimal production-safe foundation for a personal Telegram-controlled AI agent hub.
 
+For Claude Code / Cursor operating instructions, see [CLAUDE.md](./CLAUDE.md).
+
 ## Setup
 
 ```bash
